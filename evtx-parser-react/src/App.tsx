@@ -1,5 +1,11 @@
 import {ErrorBoundary, type FallbackProps} from 'react-error-boundary'
 import {EvtxParser} from '@/components/EvtxParser'
+import {MantineProvider} from "@mantine/core";
+import '@mantine/core/styles.css';
+import '@mantine/dropzone/styles.css';
+import '@mantine/modals/styles.css';
+import '@mantine/spotlight/styles.css';
+
 
 function renderError({error}: FallbackProps) {
 	return (
@@ -14,7 +20,9 @@ function renderError({error}: FallbackProps) {
 export function App() {
 	return (
 		<ErrorBoundary fallbackRender={renderError}>
-			<EvtxParser />
+			<MantineProvider> 
+				<EvtxParser />
+			</MantineProvider>
 		</ErrorBoundary>
 	)
 }
