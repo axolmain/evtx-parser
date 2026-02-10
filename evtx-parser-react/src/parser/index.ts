@@ -4,6 +4,7 @@ export {
 	parseChunk,
 	parseEvtx,
 	parseFileHeader,
+	preloadTemplateDefinitions,
 	validateChunk
 } from './evtx'
 export {formatChunkHeaderComment, formatRecordComment} from './format'

@@ -340,9 +340,11 @@ export function parseElement(
 	pos.offset += 4 // dataSize
 	const nameOffset = dv.getUint32(pos.offset, true)
 	pos.offset += 4
-	// Skip inline name structure: 4 unknown + 2 hash + 2 numChars + numChars*2 string + 2 null
-	const elemNameChars = dv.getUint16(pos.offset + 6, true)
-	pos.offset += 10 + elemNameChars * 2
+	// Inline name structure is present only when defined here (nameOffset points to current chunk position)
+	if (nameOffset === binxmlChunkBase + pos.offset) {
+		const elemNameChars = dv.getUint16(pos.offset + 6, true)
+		pos.offset += 10 + elemNameChars * 2
+	}
 
 	const elemName = readName(chunkDv, nameOffset)
 	let xml = `<${elemName}`
@@ -361,9 +363,11 @@ export function parseElement(
 			pos.offset++ // consume attribute token
 			const attrNameOff = dv.getUint32(pos.offset, true)
 			pos.offset += 4
-			// Skip inline attribute name structure
-			const attrNameChars = dv.getUint16(pos.offset + 6, true)
-			pos.offset += 10 + attrNameChars * 2
+			// Inline name structure present only when defined here
+			if (attrNameOff === binxmlChunkBase + pos.offset) {
+				const attrNameChars = dv.getUint16(pos.offset + 6, true)
+				pos.offset += 10 + attrNameChars * 2
+			}
 			const attrName = readName(chunkDv, attrNameOff)
 
 			const attrValue = parseContent(
@@ -470,6 +474,28 @@ export function parseTemplateInstance(
 		if (cachedDef) {
 			guidStr = cachedDef.guid
 			dataSize = cachedDef.dataSize
+		} else if (defDataOffset + 24 <= chunkDv.byteLength) {
+			// Fallback: read definition header directly from chunk bytes.
+			// The template pointer table may not index all definitions
+			// (e.g. templates nested inside embedded BinXml payloads).
+			const guidBytesArr = new Uint8Array(
+				chunkDv.buffer,
+				chunkDv.byteOffset + defDataOffset + 4,
+				16
+			)
+			guidStr = formatGuid(guidBytesArr)
+			dataSize = chunkDv.getUint32(defDataOffset + 20, true)
+
+			tplStats.defsByOffset[defDataOffset] = {
+				guid: guidStr,
+				defDataOffset,
+				dataSize,
+				firstSeenRecord: tplStats.currentRecordId
+			}
+			if (!tplStats.definitions[guidStr]) {
+				tplStats.definitions[guidStr] = tplStats.defsByOffset[defDataOffset]!
+				tplStats.definitionCount++
+			}
 		}
 	}
 
@@ -581,9 +607,6 @@ export function parseTemplateInstance(
 	}
 
 	if (tplStats && !tplFound) {
-		if (tplStats.missingCount < 5) {
-			console.log(`Missing template: record ${tplStats.currentRecordId}, offset 0x${defDataOffset.toString(16)}, guid=${guidStr}, dataSize=${dataSize}`)
-		}
 		tplStats.missingRefs.push({
 			recordId: tplStats.currentRecordId,
 			guid: guidStr || '(unknown)',

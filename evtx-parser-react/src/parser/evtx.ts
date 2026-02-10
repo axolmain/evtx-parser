@@ -195,6 +195,53 @@ export function discoverChunkOffsets(
 	return offsets
 }
 
+/**
+ * Pre-load template definitions from a chunk header's template pointer table.
+ * The 32-entry table is a hash table with chaining — each entry is the head
+ * of a linked list. The first 4 bytes of each template definition hold the
+ * "next" pointer to the next definition in the same bucket.
+ */
+export function preloadTemplateDefinitions(
+	chunkDv: DataView,
+	header: ChunkHeader,
+	tplStats: TemplateStats
+): void {
+	for (let i = 0; i < header.templatePointers.length; i++) {
+		let tplOffset = header.templatePointers[i]
+		// Follow the chain for this hash bucket
+		while (tplOffset !== 0 && tplOffset !== undefined) {
+			if (tplStats.defsByOffset[tplOffset]) break // already cached
+			try {
+				if (tplOffset + 24 > 65_536) break
+				const nextOffset = chunkDv.getUint32(tplOffset, true)
+				const guidBytes = new Uint8Array(
+					chunkDv.buffer,
+					chunkDv.byteOffset + tplOffset + 4,
+					16
+				)
+				const guid = formatGuid(guidBytes)
+				const dataSize = chunkDv.getUint32(tplOffset + 20, true)
+
+				tplStats.defsByOffset[tplOffset] = {
+					guid,
+					defDataOffset: tplOffset,
+					dataSize,
+					firstSeenRecord: 0
+				}
+
+				if (!tplStats.definitions[guid]) {
+					tplStats.definitions[guid] = tplStats.defsByOffset[tplOffset]!
+					tplStats.definitionCount++
+				}
+
+				tplOffset = nextOffset
+			} catch {
+				break
+			}
+		}
+	}
+}
+
 export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
 	const dv = new DataView(buffer)
 	const fileHeader = parseFileHeader(buffer, dv)
@@ -230,44 +277,7 @@ export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
 
 		const chunkDv = new DataView(buffer, chunkOffset, 65_536)
 
-		// Pre-load template definitions from chunk header's template pointer table
-		for (let i = 0; i < chunk.header.templatePointers.length; i++) {
-			const tplOffset = chunk.header.templatePointers[i]
-			if (tplOffset !== 0 && !tplStats.defsByOffset[tplOffset]) {
-				try {
-					// Verify offset is within chunk bounds
-					if (tplOffset + 24 > 65_536) continue
-
-					// Read 24-byte template definition header
-					// [0-3]   next template def offset
-					// [4-19]  GUID
-					// [20-23] dataSize
-					const guidBytes = new Uint8Array(
-						chunkDv.buffer,
-						chunkDv.byteOffset + tplOffset + 4,
-						16
-					)
-					const guid = formatGuid(guidBytes)
-					const dataSize = chunkDv.getUint32(tplOffset + 20, true)
-
-					// Register the template definition
-					tplStats.defsByOffset[tplOffset] = {
-						guid,
-						defDataOffset: tplOffset,
-						dataSize,
-						firstSeenRecord: 0 // pre-loaded from chunk header
-					}
-
-					// Track unique definitions by GUID
-					if (!tplStats.definitions[guid]) {
-						tplStats.definitions[guid] = tplStats.defsByOffset[tplOffset]!
-						tplStats.definitionCount++
-					}
-				} catch {
-					// Invalid template pointer, skip
-				}
-			}
-		}
+		preloadTemplateDefinitions(chunkDv, chunk.header, tplStats)
 
 		for (let ri = 0; ri < chunk.records.length; ri++) {
 			const r = chunk.records[ri]!

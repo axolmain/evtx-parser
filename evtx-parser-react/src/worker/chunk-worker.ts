@@ -1,7 +1,11 @@
 import {parseBinXmlDocument} from '@/parser/binxml'
-import {parseChunk, validateChunk} from '@/parser/evtx'
+import {
+	parseChunk,
+	preloadTemplateDefinitions,
+	validateChunk
+} from '@/parser/evtx'
 import {formatChunkHeaderComment, formatRecordComment} from '@/parser/format'
-import {formatGuid, hex32} from '@/parser/helpers'
+import {hex32} from '@/parser/helpers'
 import type {ChunkHeader, EvtxRecord, TemplateStats} from '@/parser/types'
 import type {
 	ChunkParseError,
@@ -60,36 +64,7 @@ function handleChunk(
 
 		const chunkDv = new DataView(buffer, 0, Math.min(65_536, buffer.byteLength))
 
-		// Pre-load template definitions from chunk header's template pointer table
-		for (let i = 0; i < chunk.header.templatePointers.length; i++) {
-			const tplOffset = chunk.header.templatePointers[i]
-			if (tplOffset && tplOffset !== 0 && !tplStats.defsByOffset[tplOffset]) {
-				try {
-					if (tplOffset + 24 > 65_536) continue
-					const guidBytes = new Uint8Array(
-						chunkDv.buffer,
-						chunkDv.byteOffset + tplOffset + 4,
-						16
-					)
-					const guid = formatGuid(guidBytes)
-					const dataSize = chunkDv.getUint32(tplOffset + 20, true)
-
-					tplStats.defsByOffset[tplOffset] = {
-						guid,
-						defDataOffset: tplOffset,
-						dataSize,
-						firstSeenRecord: 0
-					}
-
-					if (!tplStats.definitions[guid]) {
-						tplStats.definitions[guid] = tplStats.defsByOffset[tplOffset]!
-						tplStats.definitionCount++
-					}
-				} catch {
-					// Invalid template pointer, skip
-				}
-			}
-		}
+		preloadTemplateDefinitions(chunkDv, chunk.header, tplStats)
 
 		const chunkHeaderText = `${formatChunkHeaderComment(chunkIndex, adjHeader)}\n\n`
 		const recordOutputs: string[] = []
