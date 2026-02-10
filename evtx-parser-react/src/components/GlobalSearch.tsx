@@ -87,52 +87,18 @@ export function GlobalSearch({ onEventSelect }: GlobalSearchProps) {
 	}
 
 	const actions = results.map((event) => {
-		const description = (
-			<Stack gap={4}>
-				<Group justify="space-between" wrap="nowrap">
-					<Group gap="xs" wrap="nowrap">
-						<Text fw={600} size="sm">
-							<Highlight highlight={query}>Event {event.eventId}</Highlight>
-						</Text>
-						<Badge size="xs" color={LEVEL_COLORS[event.level]}>
-							{event.levelText}
-						</Badge>
-					</Group>
-					<Text size="xs" c="dimmed">
-						{formatTimestamp(event.timestamp)}
-					</Text>
-				</Group>
-
-				<Text size="xs" c="dimmed" lineClamp={1}>
-					<Highlight highlight={query}>{event.provider}</Highlight>
-					{' • '}
-					<Highlight highlight={query}>{event.computer}</Highlight>
-				</Text>
-
-				{event.eventData && (
-					<Text size="xs" c="dimmed" lineClamp={2} style={{ opacity: 0.8 }}>
-						<Highlight highlight={query}>{event.eventData}</Highlight>
-					</Text>
-				)}
-
-				<Group gap={4}>
-					<Badge size="xs" variant="dot" color="gray">
-						{event.archiveName}
-					</Badge>
-					<Text size="xs" c="dimmed">
-						/
-					</Text>
-					<Badge size="xs" variant="dot" color="gray">
-						{event.fileName}
-					</Badge>
-				</Group>
-			</Stack>
-		)
+		// Create a simple text description for Spotlight
+		const descriptionText = [
+			`${event.provider} • ${event.computer}`,
+			formatTimestamp(event.timestamp),
+			event.eventData ? event.eventData.substring(0, 100) + (event.eventData.length > 100 ? '...' : '') : '',
+			`${event.archiveName} / ${event.fileName}`
+		].filter(Boolean).join(' • ')
 
 		return {
 			id: event.id,
-			label: `Event ${event.eventId}`,
-			description,
+			label: `Event ${event.eventId} - ${event.levelText}`,
+			description: descriptionText,
 			onClick: () => handleEventSelect(event),
 			leftSection: LEVEL_ICONS[event.level],
 		}
