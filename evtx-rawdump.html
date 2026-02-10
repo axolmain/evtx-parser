@@ -290,8 +290,41 @@ var VALUE_TYPE = {
    valueType:  the type byte from the descriptor
    chunkDv, chunkStart, chunkHeader: context for BinXml-typed subs
 */
-function renderSubstitutionValue(valueBytes, valueType, chunkDv, chunkStart, chunkHeader) {
+function renderSubstitutionValue(valueBytes, valueType, chunkDv, chunkStart, chunkHeader, tplStats) {
   if (valueBytes.length === 0 && valueType !== VALUE_TYPE.NULL) return '';
+
+  // Array flag: bit 0x80 means array of base type
+  if (valueType & 0x80) {
+    var baseType = valueType & 0x7F;
+    // Array of strings: null-terminated UTF-16LE strings concatenated
+    if (baseType === VALUE_TYPE.STRING) {
+      var s = new TextDecoder('utf-16le').decode(valueBytes);
+      // Split on nulls, filter empty, join
+      var parts = s.split('\0').filter(function(p) { return p.length > 0; });
+      return xmlEscape(parts.join(', '));
+    }
+    // Fixed-size array types
+    var elemSize = 0;
+    if (baseType === VALUE_TYPE.INT8 || baseType === VALUE_TYPE.UINT8) elemSize = 1;
+    else if (baseType === VALUE_TYPE.INT16 || baseType === VALUE_TYPE.UINT16) elemSize = 2;
+    else if (baseType === VALUE_TYPE.INT32 || baseType === VALUE_TYPE.UINT32 || baseType === VALUE_TYPE.FLOAT || baseType === VALUE_TYPE.HEX32) elemSize = 4;
+    else if (baseType === VALUE_TYPE.INT64 || baseType === VALUE_TYPE.UINT64 || baseType === VALUE_TYPE.DOUBLE || baseType === VALUE_TYPE.FILETIME || baseType === VALUE_TYPE.HEX64) elemSize = 8;
+    else if (baseType === VALUE_TYPE.GUID) elemSize = 16;
+    else if (baseType === VALUE_TYPE.SYSTEMTIME) elemSize = 16;
+    if (elemSize > 0 && valueBytes.length >= elemSize) {
+      var results = [];
+      for (var i = 0; i + elemSize <= valueBytes.length; i += elemSize) {
+        var elem = new Uint8Array(valueBytes.buffer, valueBytes.byteOffset + i, elemSize);
+        results.push(renderSubstitutionValue(elem, baseType, chunkDv, chunkStart, chunkHeader, tplStats));
+      }
+      return results.join(', ');
+    }
+    // Fallback: render as hex
+    var hex = [];
+    for (var i = 0; i < valueBytes.length; i++) hex.push(HEX[valueBytes[i]]);
+    return hex.join('');
+  }
+
   var vdv = new DataView(valueBytes.buffer, valueBytes.byteOffset, valueBytes.byteLength);
 
   switch (valueType) {
@@ -375,7 +408,8 @@ function renderSubstitutionValue(valueBytes, valueType, chunkDv, chunkStart, chu
       return '0x' + vdv.getBigUint64(0, true).toString(16).padStart(16, '0');
     case VALUE_TYPE.BINXML:
       // Recursively parse embedded BinXml
-      return parseBinXmlDocument(valueBytes, chunkDv, chunkStart, chunkHeader);
+      var embeddedChunkBase = valueBytes.byteOffset - chunkDv.byteOffset;
+      return parseBinXmlDocument(valueBytes, chunkDv, chunkStart, chunkHeader, tplStats, embeddedChunkBase);
     default:
       // Unknown type — hex dump
       var hex = [];
@@ -407,7 +441,8 @@ function parseContent(bytes, dv, pos, chunkDv, chunkHeader, subs, tplStats, binx
     var base = tok & ~TOKEN.HAS_MORE_DATA_FLAG;
 
     if (base === TOKEN.EOF || base === TOKEN.CLOSE_START_ELEMENT
-        || base === TOKEN.CLOSE_EMPTY_ELEMENT || base === TOKEN.END_ELEMENT) {
+        || base === TOKEN.CLOSE_EMPTY_ELEMENT || base === TOKEN.END_ELEMENT
+        || base === TOKEN.ATTRIBUTE) {
       // Don't consume — let the caller handle these
       break;
     }
@@ -483,6 +518,9 @@ function parseElement(bytes, dv, pos, chunkDv, chunkHeader, subs, tplStats, binx
   var depId = dv.getUint16(pos.offset, true); pos.offset += 2;
   var dataSize = dv.getUint32(pos.offset, true); pos.offset += 4;
   var nameOffset = dv.getUint32(pos.offset, true); pos.offset += 4;
+  // Skip inline name structure: 4 unknown + 2 hash + 2 numChars + numChars*2 string + 2 null
+  var elemNameChars = dv.getUint16(pos.offset + 6, true);
+  pos.offset += 10 + elemNameChars * 2;
 
   var elemName = readName(chunkDv, nameOffset);
   var xml = '<' + elemName;
@@ -499,6 +537,9 @@ function parseElement(bytes, dv, pos, chunkDv, chunkHeader, subs, tplStats, binx
 
       pos.offset++; // consume attribute token
       var attrNameOff = dv.getUint32(pos.offset, true); pos.offset += 4;
+      // Skip inline attribute name structure
+      var attrNameChars = dv.getUint16(pos.offset + 6, true);
+      pos.offset += 10 + attrNameChars * 2;
       var attrName = readName(chunkDv, attrNameOff);
 
       // Attribute data: value text or substitution
@@ -659,7 +700,7 @@ function parseTemplateInstance(bytes, dv, pos, chunkDv, chunkHeader, tplStats, b
       type: desc.type,
       size: desc.size,
       bytes: valBytes,
-      rendered: renderSubstitutionValue(valBytes, desc.type, chunkDv, chunkHeader ? chunkHeader.chunkStart : 0, chunkHeader)
+      rendered: renderSubstitutionValue(valBytes, desc.type, chunkDv, chunkHeader ? chunkHeader.chunkStart : 0, chunkHeader, tplStats)
     });
   }
 
@@ -671,11 +712,13 @@ function parseTemplateInstance(bytes, dv, pos, chunkDv, chunkHeader, tplStats, b
       tplFound = false;
       throw new Error('no template definition found for defOffset=' + hex32(defDataOffset));
     }
-    if (defDataOffset + dataSize > chunkDv.byteLength) {
+    var tplBodyStart = defDataOffset + 24; // skip 24-byte def header (next-ptr, GUID, dataSize)
+    if (tplBodyStart + dataSize > chunkDv.byteLength) {
       tplFound = false;
       throw new Error('template def offset ' + hex32(defDataOffset) + ' + size ' + dataSize + ' exceeds chunk');
     }
-    var tplBytes = new Uint8Array(chunkDv.buffer, chunkDv.byteOffset + defDataOffset, dataSize);
+    
+    var tplBytes = new Uint8Array(chunkDv.buffer, chunkDv.byteOffset + tplBodyStart, dataSize);
     var tplDv = new DataView(tplBytes.buffer, tplBytes.byteOffset, tplBytes.byteLength);
     var tplPos = { offset: 0 };
 
@@ -685,7 +728,7 @@ function parseTemplateInstance(bytes, dv, pos, chunkDv, chunkHeader, tplStats, b
     }
 
     // Parse the element tree with substitutions
-    xml = parseContent(tplBytes, tplDv, tplPos, chunkDv, chunkHeader, subs, tplStats, defDataOffset);
+    xml = parseContent(tplBytes, tplDv, tplPos, chunkDv, chunkHeader, subs, tplStats, tplBodyStart);
   } catch (e) {
     xml = '<!-- template parse error: ' + e.message + ' -->';
     tplFound = false;
@@ -981,11 +1024,9 @@ function parseEvtx(buffer) {
       var recOut = '';
       if (ri === 0) recOut += chunkHeaderText;
       recOut += formatRecordComment(r, ci) + '\n';
-      recOut += '<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">\n';
       if (tplComment) recOut += tplComment;
       recOut += parsedXml;
-      recOut += '\n<!-- hex: ' + hexDump(r.binxmlBytes) + ' -->\n';
-      recOut += '</Event>';
+      // recOut += '\n<!-- hex: ' + hexDump(r.binxmlBytes) + ' -->\n';
       recordOutputs.push(recOut);
     }
 
