@@ -68,7 +68,7 @@ export function EventsTable({records}: Properties) {
 	const visibleColumnCount = visibleColumns.length
 
 	return (
-		<Stack gap="sm" style={{width: '100%'}}>
+		<Stack gap="sm" w="100%">
 			<Group justify="flex-end">
 				<Popover opened={popoverOpened} onChange={setPopoverOpened} width={300} position="bottom-end">
 					<Popover.Target>
@@ -91,27 +91,27 @@ export function EventsTable({records}: Properties) {
 				</Popover>
 			</Group>
 
-			<ScrollArea style={{width: '100%', height: '600px'}}>
+			<ScrollArea w="100%" h={600}>
 				<Table striped highlightOnHover withTableBorder withColumnBorders stickyHeader>
 					<Table.Thead>
 						<Table.Tr>
-							{isColumnVisible('recordId') && <Table.Th style={{minWidth: '80px'}}>Record ID</Table.Th>}
-							{isColumnVisible('timestamp') && <Table.Th style={{minWidth: '180px'}}>Time Created</Table.Th>}
-							{isColumnVisible('provider') && <Table.Th style={{minWidth: '200px'}}>Provider</Table.Th>}
-							{isColumnVisible('eventId') && <Table.Th style={{minWidth: '80px'}}>Event ID</Table.Th>}
-							{isColumnVisible('level') && <Table.Th style={{minWidth: '100px'}}>Level</Table.Th>}
-							{isColumnVisible('task') && <Table.Th style={{minWidth: '60px'}}>Task</Table.Th>}
-							{isColumnVisible('opcode') && <Table.Th style={{minWidth: '70px'}}>Opcode</Table.Th>}
-							{isColumnVisible('keywords') && <Table.Th style={{minWidth: '120px'}}>Keywords</Table.Th>}
-							{isColumnVisible('version') && <Table.Th style={{minWidth: '60px'}}>Version</Table.Th>}
-							{isColumnVisible('channel') && <Table.Th style={{minWidth: '120px'}}>Channel</Table.Th>}
-							{isColumnVisible('computer') && <Table.Th style={{minWidth: '120px'}}>Computer</Table.Th>}
-							{isColumnVisible('processId') && <Table.Th style={{minWidth: '80px'}}>Process ID</Table.Th>}
-							{isColumnVisible('threadId') && <Table.Th style={{minWidth: '80px'}}>Thread ID</Table.Th>}
-							{isColumnVisible('securityUserId') && <Table.Th style={{minWidth: '180px'}}>Security UserID</Table.Th>}
-							{isColumnVisible('activityId') && <Table.Th style={{minWidth: '120px'}}>Activity ID</Table.Th>}
-							{isColumnVisible('relatedActivityId') && <Table.Th style={{minWidth: '120px'}}>Related Activity ID</Table.Th>}
-							{isColumnVisible('eventData') && <Table.Th style={{minWidth: '200px'}}>Event Data</Table.Th>}
+							{isColumnVisible('recordId') && <Table.Th miw={80}>Record ID</Table.Th>}
+							{isColumnVisible('timestamp') && <Table.Th miw={180}>Time Created</Table.Th>}
+							{isColumnVisible('provider') && <Table.Th miw={200}>Provider</Table.Th>}
+							{isColumnVisible('eventId') && <Table.Th miw={80}>Event ID</Table.Th>}
+							{isColumnVisible('level') && <Table.Th miw={100}>Level</Table.Th>}
+							{isColumnVisible('task') && <Table.Th miw={60}>Task</Table.Th>}
+							{isColumnVisible('opcode') && <Table.Th miw={70}>Opcode</Table.Th>}
+							{isColumnVisible('keywords') && <Table.Th miw={120}>Keywords</Table.Th>}
+							{isColumnVisible('version') && <Table.Th miw={60}>Version</Table.Th>}
+							{isColumnVisible('channel') && <Table.Th miw={120}>Channel</Table.Th>}
+							{isColumnVisible('computer') && <Table.Th miw={120}>Computer</Table.Th>}
+							{isColumnVisible('processId') && <Table.Th miw={80}>Process ID</Table.Th>}
+							{isColumnVisible('threadId') && <Table.Th miw={80}>Thread ID</Table.Th>}
+							{isColumnVisible('securityUserId') && <Table.Th miw={180}>Security UserID</Table.Th>}
+							{isColumnVisible('activityId') && <Table.Th miw={120}>Activity ID</Table.Th>}
+							{isColumnVisible('relatedActivityId') && <Table.Th miw={120}>Related Activity ID</Table.Th>}
+							{isColumnVisible('eventData') && <Table.Th miw={200}>Event Data</Table.Th>}
 						</Table.Tr>
 					</Table.Thead>
 					<Table.Tbody>
@@ -126,11 +126,11 @@ export function EventsTable({records}: Properties) {
 								>
 									{isColumnVisible('recordId') && <Table.Td>{record.recordId}</Table.Td>}
 									{isColumnVisible('timestamp') && (
-										<Table.Td style={{fontFamily: 'monospace', fontSize: '0.8rem'}}>
+										<Table.Td ff="monospace" fz="0.8rem">
 											{record.timestamp}
 										</Table.Td>
 									)}
-									{isColumnVisible('provider') && <Table.Td style={{fontSize: '0.85rem'}}>{record.provider}</Table.Td>}
+									{isColumnVisible('provider') && <Table.Td fz="0.85rem">{record.provider}</Table.Td>}
 									{isColumnVisible('eventId') && <Table.Td>{record.eventId}</Table.Td>}
 									{isColumnVisible('level') && (
 										<Table.Td>
@@ -142,7 +142,7 @@ export function EventsTable({records}: Properties) {
 									{isColumnVisible('task') && <Table.Td>{record.task}</Table.Td>}
 									{isColumnVisible('opcode') && <Table.Td>{record.opcode}</Table.Td>}
 									{isColumnVisible('keywords') && (
-										<Table.Td style={{fontFamily: 'monospace', fontSize: '0.8rem'}}>
+										<Table.Td ff="monospace" fz="0.8rem">
 											{record.keywords}
 										</Table.Td>
 									)}
@@ -152,41 +152,31 @@ export function EventsTable({records}: Properties) {
 									{isColumnVisible('processId') && <Table.Td>{record.processId}</Table.Td>}
 									{isColumnVisible('threadId') && <Table.Td>{record.threadId}</Table.Td>}
 									{isColumnVisible('securityUserId') && (
-										<Table.Td style={{fontFamily: 'monospace', fontSize: '0.75rem'}}>
+										<Table.Td ff="monospace" fz="0.75rem">
 											{record.securityUserId}
 										</Table.Td>
 									)}
 									{isColumnVisible('activityId') && (
-										<Table.Td style={{fontFamily: 'monospace', fontSize: '0.75rem'}}>
+										<Table.Td ff="monospace" fz="0.75rem">
 											{record.activityId}
 										</Table.Td>
 									)}
 									{isColumnVisible('relatedActivityId') && (
-										<Table.Td style={{fontFamily: 'monospace', fontSize: '0.75rem'}}>
+										<Table.Td ff="monospace" fz="0.75rem">
 											{record.relatedActivityId}
 										</Table.Td>
 									)}
 									{isColumnVisible('eventData') && (
-										<Table.Td>
-											<span style={{ whiteSpace: 'pre-wrap' }}>
-											   {record.eventData}
-											</span>
+										<Table.Td style={{whiteSpace: 'pre-wrap'}}>
+											{record.eventData}
 										</Table.Td>
 									)}
 								</Table.Tr>
 								{expandedRow === record.recordId && (
 									<Table.Tr key={`${record.recordId}-expanded`}>
-										<Table.Td colSpan={visibleColumnCount} style={{padding: 0}}>
+										<Table.Td colSpan={visibleColumnCount} p={0}>
 											<Collapse in={expandedRow === record.recordId}>
-												<Code
-													block
-													style={{
-														fontSize: '0.75rem',
-														margin: '1rem',
-														maxHeight: '400px',
-														overflow: 'auto'
-													}}
-												>
+												<Code block m="1rem" fz="0.75rem" mah={400} style={{overflow: 'auto'}}>
 													{record.xml}
 												</Code>
 											</Collapse>

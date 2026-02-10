@@ -4,7 +4,6 @@ import {
 	Badge,
 	Box,
 	Button,
-	Container,
 	Divider,
 	Group,
 	Loader,
@@ -25,7 +24,7 @@ import { ZipFileBrowser } from './ZipFileBrowser'
 
 function UnsupportedFileViewer({ fileName }: { fileName: string }) {
 	return (
-		<Stack gap="md" align="center" style={{ padding: '4rem' }}>
+		<Stack gap="md" align="center" p="4rem">
 			<IconAlertCircle size={64} color="var(--mantine-color-gray-6)" />
 			<Title order={3}>Unsupported File Type</Title>
 			<Text c="dimmed" ta="center" maw={500}>
@@ -79,9 +78,9 @@ function StandaloneTextViewer({ file, fileName, onReset }: { file: File; fileNam
 	}
 
 	return (
-		<Container size="xl" style={{ minHeight: '100vh', padding: '2rem' }}>
+		<Box p="2rem" maw={1400} mx="auto" style={{ minHeight: '100vh' }}>
 			<Stack gap="md">
-				<Group justify="space-between">
+				<Group justify="space-between" wrap="wrap">
 					<Title order={1}>Text Viewer - {fileName}</Title>
 					<Group gap="xs">
 						<Button
@@ -104,37 +103,21 @@ function StandaloneTextViewer({ file, fileName, onReset }: { file: File; fileNam
 					</Group>
 				</Group>
 				{loading ? (
-					<Container size="md" style={{ padding: '4rem' }}>
+					<Box p="4rem">
 						<Stack gap="md" align="center">
 							<Loader size="lg" />
 							<Text size="lg">Loading {fileName}...</Text>
 						</Stack>
-					</Container>
+					</Box>
 				) : (
-					<Paper
-						withBorder
-						p="md"
-						style={{
-							maxHeight: 'calc(100vh - 10rem)',
-							overflow: 'auto',
-						}}
-					>
-						<Text
-							component="pre"
-							ff="monospace"
-							size="sm"
-							style={{
-								whiteSpace: 'pre-wrap',
-								wordBreak: 'break-word',
-								margin: 0,
-							}}
-						>
+					<Paper withBorder p="md" style={{ maxHeight: 'calc(100vh - 10rem)', overflow: 'auto' }}>
+						<Text component="pre" ff="monospace" size="sm" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}>
 							{content}
 						</Text>
 					</Paper>
 				)}
 			</Stack>
-		</Container>
+		</Box>
 	)
 }
 
@@ -160,7 +143,7 @@ export function FileViewer() {
 		// Error state
 		if (viewer.state.status === 'error') {
 			return (
-				<Container size="lg" style={{ padding: '4rem' }}>
+				<Box p="4rem" maw={900} mx="auto">
 					<Alert
 						icon={<IconAlertCircle size={20} />}
 						title="Error"
@@ -170,26 +153,26 @@ export function FileViewer() {
 					>
 						{viewer.state.error}
 					</Alert>
-				</Container>
+				</Box>
 			)
 		}
 
 		// Loading zip
 		if (viewer.state.status === 'loading-zip') {
 			return (
-				<Container size="lg" style={{ padding: '4rem' }}>
+				<Box p="4rem" maw={900} mx="auto">
 					<Stack gap="md" align="center">
 						<Loader size="lg" />
 						<Text size="lg">Loading {viewer.state.fileName}...</Text>
 					</Stack>
-				</Container>
+				</Box>
 			)
 		}
 
 		// Standalone EVTX mode (backwards compatibility)
 		if (viewer.state.status === 'standalone-evtx') {
 			return (
-				<Container size="xl" style={{ minHeight: '100vh', padding: '2rem' }}>
+				<Box p="2rem" style={{ minHeight: '100vh' }}>
 					<Stack gap="md" align="center">
 						<Group>
 							<Title order={1}>EVTX → Raw Byte Dump</Title>
@@ -204,7 +187,7 @@ export function FileViewer() {
 						</Group>
 						<EvtxViewer file={viewer.state.file} />
 					</Stack>
-				</Container>
+				</Box>
 			)
 		}
 
@@ -224,7 +207,7 @@ export function FileViewer() {
 				viewer.state.status === 'viewing-file' && viewer.state.isLoading
 
 			return (
-				<Box style={{ display: 'flex', minHeight: '100vh' }}>
+				<Box style={{ display: 'flex', minHeight: '100vh', maxWidth: '100vw', overflow: 'hidden' }}>
 					{/* Sidebar */}
 					<ZipFileBrowser
 						entries={viewer.state.entries}
@@ -234,12 +217,12 @@ export function FileViewer() {
 					/>
 
 					{/* Content Area */}
-					<Box style={{ flex: 1, padding: '2rem' }}>
+					<Box style={{ flex: 1, padding: '2rem', overflow: 'auto', minWidth: 0 }}>
 						<Stack gap="lg">
 							{/* Header */}
-							<Group justify="space-between">
-								<Stack gap="xs">
-									<Group>
+							<Group justify="space-between" wrap="wrap">
+								<Stack gap="xs" style={{ minWidth: 0 }}>
+									<Group wrap="wrap">
 										<Title order={2}>SysInfoZip Viewer</Title>
 										<Badge size="lg" variant="light">
 											{viewer.state.zipFileName}
@@ -254,7 +237,7 @@ export function FileViewer() {
 										{viewer.state.entries.filter((e) => e.type === 'txt').length} TXT
 									</Text>
 								</Stack>
-								<Group gap="xs">
+								<Group gap="xs" wrap="wrap">
 									<Button
 										size="xs"
 										variant="light"
@@ -299,22 +282,22 @@ export function FileViewer() {
 
 							{/* File Content */}
 							{!isViewing && (
-								<Container size="md" style={{ padding: '4rem' }}>
+								<Box p="4rem">
 									<Text size="lg" c="dimmed" ta="center">
 										Select a file from the sidebar to view its contents
 									</Text>
-								</Container>
+								</Box>
 							)}
 
 							{isViewing && isLoading && (
-								<Container size="md" style={{ padding: '4rem' }}>
+								<Box p="4rem">
 									<Stack gap="md" align="center">
 										<Loader size="lg" />
 										<Text size="lg">
 											Loading {currentFile?.name || 'file'}...
 										</Text>
 									</Stack>
-								</Container>
+								</Box>
 							)}
 
 							{isViewing && !isLoading && currentFile && (
@@ -327,9 +310,9 @@ export function FileViewer() {
 										)
 										if (!cachedData) {
 											return (
-												<Container size="md" style={{ padding: '2rem' }}>
+												<Box p="2rem">
 													<Text c="dimmed">Parsing EVTX file...</Text>
-												</Container>
+												</Box>
 											)
 										}
 										// Type guard to ensure cachedData is EvtxCacheData
@@ -390,7 +373,7 @@ export function FileViewer() {
 
 		// Default idle state - show dropzone and recent archives
 		return (
-			<Container size="xl" style={{ minHeight: '100vh', padding: '2rem' }}>
+			<Box p="2rem" maw={1400} mx="auto" style={{ minHeight: '100vh' }}>
 				<Stack gap="xl">
 					<Stack gap="md" align="center">
 						<Title order={1}>SysInfoZip / EVTX Viewer</Title>
@@ -408,29 +391,24 @@ export function FileViewer() {
 								'text/plain': ['.txt'],
 								'text/xml': ['.xml'],
 							}}
-							style={{ width: '100%', maxWidth: '700px' }}
+							w="100%"
+							maw={700}
 						>
-							<div style={{ textAlign: 'center', padding: '3rem 2rem' }}>
+							<Box ta="center" p="3rem 2rem">
 								<Dropzone.Accept>
-									<div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>
-										📦
-									</div>
+									<Text size="3rem" mb="0.5rem">📦</Text>
 									<Text size="md" c="teal">
 										Drop file here
 									</Text>
 								</Dropzone.Accept>
 								<Dropzone.Reject>
-									<div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>
-										❌
-									</div>
+									<Text size="3rem" mb="0.5rem">❌</Text>
 									<Text size="md" c="red">
 										Only .zip, .evtx, .json, .txt, or .xml files allowed
 									</Text>
 								</Dropzone.Reject>
 								<Dropzone.Idle>
-									<div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>
-										📦
-									</div>
+									<Text size="3rem" mb="0.5rem">📦</Text>
 									<Text size="md" c="dimmed">
 										Drop a .zip, .evtx, .json, .txt, or .xml file here, or click to browse
 									</Text>
@@ -439,7 +417,7 @@ export function FileViewer() {
 										JSON files (.json), text files (.txt), and XML files (.xml)
 									</Text>
 								</Dropzone.Idle>
-							</div>
+							</Box>
 						</Dropzone>
 					</Stack>
 
@@ -448,7 +426,7 @@ export function FileViewer() {
 						viewer.state.recentArchives.length > 0 && (
 							<>
 								<Divider />
-								<Box style={{ maxWidth: '700px', width: '100%', margin: '0 auto' }}>
+								<Box maw={700} w="100%" mx="auto">
 									<ArchiveManager
 										archives={viewer.state.recentArchives}
 										onLoadArchive={viewer.loadArchive}
@@ -458,7 +436,7 @@ export function FileViewer() {
 							</>
 						)}
 				</Stack>
-			</Container>
+			</Box>
 		)
 	}
 

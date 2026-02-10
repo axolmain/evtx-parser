@@ -34,6 +34,14 @@ interface ParsedXML {
 		}
 		EventData?: {
 			Data?: Array<{ '@_Name'?: string; '#text'?: string }> | { '@_Name'?: string; '#text'?: string }
+			'#text'?: string
+			[key: string]: any
+		}
+		UserData?: {
+			[key: string]: any
+		}
+		RenderingInfo?: {
+			Message?: string
 		}
 	}
 }
@@ -84,20 +92,70 @@ export function parseEventXml(xmlString: string): {
 
 		// Extract EventData as formatted key-value pairs
 		const eventDataPairs: string[] = []
+
+		// Try EventData.Data first
 		const eventDataObj = parsed.Event?.EventData?.Data
-
 		if (eventDataObj) {
-			const dataArray = Array.isArray(eventDataObj) ? eventDataObj : [eventDataObj]
-
-			for (const dataItem of dataArray) {
-				const name = dataItem['@_Name']
-				const value = getTextValue(dataItem['#text'])
-
-				if (value) {
-					// If has Name attribute, format as "Name: Value", otherwise just the value
-					eventDataPairs.push(name ? `${name}: ${value}` : value)
+			// Check if Data is a plain string
+			if (typeof eventDataObj === 'string') {
+				eventDataPairs.push(eventDataObj)
+			}
+			// Otherwise handle as structured data (object/array)
+			else {
+				const dataArray = Array.isArray(eventDataObj) ? eventDataObj : [eventDataObj]
+				for (const dataItem of dataArray) {
+					const name = dataItem['@_Name']
+					const value = getTextValue(dataItem['#text'])
+					if (value) {
+						eventDataPairs.push(name ? `${name}: ${value}` : value)
+					}
 				}
 			}
+		}
+		// If no Data, check for plain text in EventData
+		else if (parsed.Event?.EventData?.['#text']) {
+			eventDataPairs.push(parsed.Event.EventData['#text'])
+		}
+		// Check for other properties in EventData (custom structure)
+		else if (parsed.Event?.EventData) {
+			const eventData = parsed.Event.EventData
+			for (const [key, value] of Object.entries(eventData)) {
+				if (key !== 'Data' && key !== '#text' && !key.startsWith('@_')) {
+					const textValue = getTextValue(value)
+					if (textValue) {
+						eventDataPairs.push(`${key}: ${textValue}`)
+					}
+				}
+			}
+		}
+
+		// Also check UserData if EventData is empty
+		if (eventDataPairs.length === 0 && parsed.Event?.UserData) {
+			for (const [key, value] of Object.entries(parsed.Event.UserData)) {
+				if (!key.startsWith('@_')) {
+					if (typeof value === 'object' && value !== null) {
+						// Handle nested UserData structures
+						for (const [subKey, subValue] of Object.entries(value)) {
+							if (!subKey.startsWith('@_')) {
+								const textValue = getTextValue(subValue)
+								if (textValue) {
+									eventDataPairs.push(`${subKey}: ${textValue}`)
+								}
+							}
+						}
+					} else {
+						const textValue = getTextValue(value)
+						if (textValue) {
+							eventDataPairs.push(`${key}: ${textValue}`)
+						}
+					}
+				}
+			}
+		}
+
+		// Fallback to RenderingInfo message if still empty
+		if (eventDataPairs.length === 0 && parsed.Event?.RenderingInfo?.Message) {
+			eventDataPairs.push(parsed.Event.RenderingInfo.Message)
 		}
 
 		const eventData = eventDataPairs.join('\n')

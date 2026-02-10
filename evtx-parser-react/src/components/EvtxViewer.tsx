@@ -148,7 +148,7 @@ export function EvtxViewer({
 	}, [filteredRecords, pagination.start, pagination.end])
 
 	return (
-		<Stack gap="md" style={{ width: '100%' }} align="center">
+		<Stack gap="md" align="center">
 			{!isParsedMode && <ProgressBar progress={getProgress(effectiveState.status)} />}
 			{!isParsedMode && (
 				<StatusMessage

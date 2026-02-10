@@ -72,78 +72,70 @@ export function EventViewer({records}: Properties) {
 	}
 
 	return (
-		<Box style={{width: '100%', maxWidth: '100%', height: '700px', display: 'flex', gap: '1rem', overflow: 'hidden'}}>
+		<Box style={{display: 'flex', gap: '1rem', height: '700px', width: '100%', maxWidth: '100%', overflow: 'hidden'}}>
 			{/* Event List - Left Panel */}
 			<Paper withBorder style={{flex: '0 0 400px', minWidth: 0, display: 'flex', flexDirection: 'column'}}>
 				<Box p="md" style={{borderBottom: '1px solid var(--mantine-color-dark-4)'}}>
 					<Title order={4}>Events ({records.length})</Title>
 				</Box>
-				<ScrollArea style={{flex: 1}}>
-					<Stack gap={0} style={{width: '100%', maxWidth: '100%'}}>
-						{records.map(record => (
-							<Paper
-								key={record.recordId}
-								p="md"
-								style={{
-									cursor: 'pointer',
-									borderBottom: '1px solid var(--mantine-color-dark-4)',
-									borderLeft: `4px solid var(--mantine-color-${LEVEL_COLORS[record.level] || 'gray'}-6)`,
-									backgroundColor:
-										selectedEvent?.recordId === record.recordId
-											? 'var(--mantine-color-dark-6)'
-											: 'transparent',
-									transition: 'background-color 0.1s',
-									width: '100%',
-									maxWidth: '100%',
-									boxSizing: 'border-box'
-								}}
-								onMouseEnter={(e) => {
-									if (selectedEvent?.recordId !== record.recordId) {
-										e.currentTarget.style.backgroundColor = 'var(--mantine-color-dark-7)'
-									}
-								}}
-								onMouseLeave={(e) => {
-									if (selectedEvent?.recordId !== record.recordId) {
-										e.currentTarget.style.backgroundColor = 'transparent'
-									}
-								}}
-								onClick={() => setSelectedEvent(record)}
-							>
-								<Group gap="sm" wrap="nowrap" align="flex-start" style={{width: '100%', maxWidth: '100%'}}>
-									<Box style={{flexShrink: 0, marginTop: '2px'}}>
-										{LEVEL_ICONS[record.level] || LEVEL_ICONS[4]}
-									</Box>
-									<Stack gap={4} style={{flex: 1, minWidth: 0, maxWidth: '100%', overflow: 'hidden'}}>
-										<Group gap="xs">
-											<Text size="sm" fw={500}>
-												{record.eventId}
+				<ScrollArea style={{flex: 1, overflow: 'auto'}}>
+					<Stack gap={0}>
+						{records.map(record => {
+							const isSelected = selectedEvent?.recordId === record.recordId
+							const levelColor = LEVEL_COLORS[record.level] || 'gray'
+
+							return (
+								<Paper
+									key={record.recordId}
+									p="md"
+									style={{
+										cursor: 'pointer',
+										borderBottom: '1px solid var(--mantine-color-dark-4)',
+										borderLeft: `4px solid var(--mantine-color-${levelColor}-6)`,
+										backgroundColor: isSelected ? 'var(--mantine-color-dark-6)' : 'transparent',
+										transition: 'background-color 0.1s'
+									}}
+									onMouseEnter={(e) => {
+										if (!isSelected) {
+											e.currentTarget.style.backgroundColor = 'var(--mantine-color-dark-7)'
+										}
+									}}
+									onMouseLeave={(e) => {
+										if (!isSelected) {
+											e.currentTarget.style.backgroundColor = 'transparent'
+										}
+									}}
+									onClick={() => setSelectedEvent(record)}
+								>
+									<Group gap="sm" wrap="nowrap" align="flex-start">
+										<Box style={{flexShrink: 0}} mt={2}>
+											{LEVEL_ICONS[record.level] || LEVEL_ICONS[4]}
+										</Box>
+										<Stack gap={4} style={{flex: 1, minWidth: 0, overflow: 'hidden'}}>
+											<Group gap="xs">
+												<Text size="sm" fw={500}>
+													{record.eventId}
+												</Text>
+												<Badge size="xs" color={levelColor}>
+													{record.levelText}
+												</Badge>
+											</Group>
+											<Text size="xs" c="dimmed" truncate>
+												{record.provider}
 											</Text>
-											<Badge size="xs" color={LEVEL_COLORS[record.level] ?? 'gray'}>
-												{record.levelText}
-											</Badge>
-										</Group>
-										<Text size="xs" c="dimmed" truncate>
-											{record.provider}
-										</Text>
-										{record.eventData && (
-											<Text
-												size="xs"
-												lineClamp={2}
-												style={{
-													color: 'var(--mantine-color-dimmed)',
-													lineHeight: 1.4
-												}}
-											>
-												{record.eventData}
+											{record.eventData && (
+												<Text size="xs" c="dimmed" lineClamp={2} lh={1.4}>
+													{record.eventData}
+												</Text>
+											)}
+											<Text size="xs" c="dimmed">
+												{formatRelativeTime(record.timestamp)}
 											</Text>
-										)}
-										<Text size="xs" c="dimmed">
-											{formatRelativeTime(record.timestamp)}
-										</Text>
-									</Stack>
-								</Group>
-							</Paper>
-						))}
+										</Stack>
+									</Group>
+								</Paper>
+							)
+						})}
 					</Stack>
 				</ScrollArea>
 			</Paper>
@@ -153,7 +145,7 @@ export function EventViewer({records}: Properties) {
 				{selectedEvent ? (
 					<>
 						<Box p="md" style={{borderBottom: '1px solid var(--mantine-color-dark-4)'}}>
-							<Group justify="space-between">
+							<Group justify="space-between" wrap="wrap">
 								<Group gap="sm">
 									{LEVEL_ICONS[selectedEvent.level] || LEVEL_ICONS[4]}
 									<div>
@@ -190,16 +182,26 @@ export function EventViewer({records}: Properties) {
 							</Group>
 						</Box>
 
-						<Tabs defaultValue="general" style={{flex: 1, display: 'flex', flexDirection: 'column'}}>
+						<Tabs defaultValue="eventdata" style={{flex: 1, display: 'flex', flexDirection: 'column'}}>
 							<Tabs.List px="md">
-								<Tabs.Tab value="general">General</Tabs.Tab>
 								<Tabs.Tab value="eventdata">Event Data</Tabs.Tab>
+								<Tabs.Tab value="general">General</Tabs.Tab>
 								<Tabs.Tab value="xml">XML</Tabs.Tab>
 							</Tabs.List>
 
 							<Box style={{flex: 1, overflow: 'hidden'}}>
-								<Tabs.Panel value="general" style={{height: '100%'}}>
-									<ScrollArea style={{height: '100%', width: '100%'}} p="md">
+								<Tabs.Panel value="eventdata" h="100%">
+									<ScrollArea h="100%" p="md">
+										{selectedEvent.eventData ? (
+											<Code block style={{maxWidth: '100%', overflowWrap: 'break-word'}}>{selectedEvent.eventData}</Code>
+										) : (
+											<Text c="dimmed">No event data</Text>
+										)}
+									</ScrollArea>
+								</Tabs.Panel>
+
+								<Tabs.Panel value="general" h="100%">
+									<ScrollArea h="100%" p="md">
 										<Stack gap="md">
 											{selectedEvent.eventData && (
 												<>
@@ -207,8 +209,8 @@ export function EventViewer({records}: Properties) {
 														<Text size="sm" fw={500} mb="xs">
 															Description:
 														</Text>
-														<Paper withBorder p="sm" style={{backgroundColor: 'var(--mantine-color-dark-6)'}}>
-															<Text size="sm" style={{whiteSpace: 'pre-wrap'}}>
+														<Paper withBorder p="sm" bg="dark.6">
+															<Text size="sm" style={{whiteSpace: 'pre-wrap', wordBreak: 'break-word'}}>
 																{selectedEvent.eventData}
 															</Text>
 														</Paper>
@@ -257,30 +259,16 @@ export function EventViewer({records}: Properties) {
 									</ScrollArea>
 								</Tabs.Panel>
 
-								<Tabs.Panel value="eventdata" style={{height: '100%'}}>
-									<ScrollArea style={{height: '100%'}} p="md">
-										{selectedEvent.eventData ? (
-											<Code block style={{fontSize: '0.85rem', overflowX: 'auto', maxWidth: '100%'}}>
-												{selectedEvent.eventData}
-											</Code>
-										) : (
-											<Text c="dimmed">No event data</Text>
-										)}
-									</ScrollArea>
-								</Tabs.Panel>
-
-								<Tabs.Panel value="xml" style={{height: '100%'}}>
-									<ScrollArea style={{height: '100%'}} p="md">
-										<Code block style={{fontSize: '0.8rem', overflowX: 'auto', maxWidth: '100%'}}>
-											{selectedEvent.xml}
-										</Code>
+								<Tabs.Panel value="xml" h="100%">
+									<ScrollArea h="100%" p="md">
+										<Code block style={{maxWidth: '100%', overflowWrap: 'break-word'}}>{selectedEvent.xml}</Code>
 									</ScrollArea>
 								</Tabs.Panel>
 							</Box>
 						</Tabs>
 					</>
 				) : (
-					<Box p="xl" style={{textAlign: 'center'}}>
+					<Box p="xl" ta="center">
 						<Text c="dimmed">Select an event to view details</Text>
 					</Box>
 				)}
@@ -299,11 +287,11 @@ function DetailRow({label, value, mono}: DetailRowProps) {
 	if (!value) return null
 
 	return (
-		<Group gap="xs" wrap="nowrap">
-			<Text size="sm" fw={500} style={{minWidth: '140px'}}>
+		<Group gap="xs" wrap="nowrap" align="flex-start">
+			<Text size="sm" fw={500} miw={140}>
 				{label}:
 			</Text>
-			<Text size="sm" style={{fontFamily: mono ? 'monospace' : 'inherit', wordBreak: 'break-word'}}>
+			<Text size="sm" ff={mono ? 'monospace' : undefined} style={{wordBreak: 'break-word', flex: 1}}>
 				{value}
 			</Text>
 		</Group>
