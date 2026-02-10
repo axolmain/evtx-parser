@@ -1,40 +1,67 @@
-# Vitamin 2.0
+# EVTX Raw Dump
 
-![Test workflow](https://github.com/wtchnm/Vitamin/actions/workflows/test.yml/badge.svg) [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/wtchnm/Vitamin/blob/main/LICENSE)
+Browser-based parser for Windows Event Log (`.evtx`) files. Drop a file, get structured XML with full BinXml decoding, template tracking, and chunk-level validation.
 
-Opinionated Vite starter template. Previous version available on v1 branch.
+## Usage
 
-## Features
+Drop an `.evtx` file onto the page (or click to browse). The parser reads the entire file client-side — nothing is uploaded.
 
-- [Vite 6](https://vitejs.dev) with [React 19](https://reactjs.org), [TypeScript 5](https://www.typescriptlang.org) and [absolute imports](https://github.com/aleclarson/vite-tsconfig-paths).
-- [Tailwind CSS v4](https://tailwindcss.com) for easy stylization.
-- [Biome V2](https://next.biomejs.dev) for linting, formatting and automatic import sorting.
-- Write unit and integration tests with [Vitest 3](https://vitest.dev/) and [Testing Library 16](https://testing-library.com/).
-- Write e2e tests with [Playwright 1.52](https://www.cypress.io).
+Output includes:
+- XML reconstruction from BinXml binary format
+- Per-record metadata comments (offsets, sizes, timestamps)
+- Per-chunk header comments (record ranges, checksums, flags)
+- Summary header with template statistics and parse errors
+- Pagination for large files (50/100/250/500 records per page)
+- Copy to clipboard and download as `.xml`
 
-## Getting started
-
-Use this repository as a [GitHub template](https://github.com/wtchnm/Vitamin/generate) or use [degit](https://github.com/Rich-Harris/degit) to clone to your machine with an empty git history:
-
-```
-npx degit wtchnm/Vitamin#main my-app
-```
-
-Then, install the dependencies:
+## Architecture
 
 ```
-pnpm install
+src/
+  parser/       Pure TypeScript — zero DOM, zero React. Testable, Worker-ready.
+  hooks/        React hooks bridging parser to UI state
+  components/   React presentational + container components
+```
+
+### Parser layer
+
+| File | Contents |
+|---|---|
+| `types.ts` | All interfaces: FileHeader, ChunkHeader, EvtxRecord, TemplateStats, etc. |
+| `constants.ts` | HEX lookup, TOKEN, TOKEN_NAMES, VALUE_TYPE |
+| `helpers.ts` | filetimeToIso, hexDump, hex32, xmlEscape, readName, formatGuid |
+| `format.ts` | formatChunkHeaderComment, formatRecordComment |
+| `binxml.ts` | Recursive descent BinXml parser (elements, templates, substitutions) |
+| `evtx.ts` | File/chunk/record parsing, chunk validation, top-level parseEvtx |
+
+### Hooks
+
+| File | Purpose |
+|---|---|
+| `useEvtxParser.ts` | Parse lifecycle: idle → reading → parsing → done/error |
+| `usePagination.ts` | Page state, navigation, page size selection |
+
+## Development
+
+```
+npm install
+npm run dev
 ```
 
 ## Scripts
 
-- `pnpm dev` - start a development server with hot reload.
-- `pnpm build` - build for production. The generated files will be on the `dist` folder.
-- `pnpm preview` - locally preview the production build.
-- `pnpm test` - run unit and integration tests related to changed files based on git.
-- `pnpm test:ci` - run all unit and integration tests in CI mode.
-- `pnpm test:e2e` - run all e2e tests with Playwright.
-- `pnpm test:e2e:ci` - run all e2e tests headlessly.
-- `pnpm format` - format all files with Biome Formatter.
-- `pnpm lint` - runs TypeScript and Biome.
-- `pnpm validate` - runs `lint`, `test:ci` and `test:e2e:ci`.
+- `npm run dev` — start dev server with hot reload
+- `npm run build` — production build to `dist/`
+- `npm run preview` — preview production build locally
+- `npm test` — run unit/integration tests (watch mode)
+- `npm run test:ci` — run all tests once
+- `npm run lint` — TypeScript type-check + Biome lint
+- `npm run format` — format with Biome
+
+## Tech stack
+
+- React 19, TypeScript 5, Vite 7
+- Tailwind CSS v4
+- Biome v2 (lint + format)
+- Vitest 4 + Testing Library (unit/integration)
+- Playwright (e2e)

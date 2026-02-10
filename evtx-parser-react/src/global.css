@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
 @theme {
-	--font-sans: Inter, sans-serif;
+	--font-mono: "Cascadia Code", "Fira Code", Consolas, monospace;
+}
+
+body {
+	font-family: system-ui, -apple-system, sans-serif;
+	color: #e0e0e0;
+	background: #0a0a0f;
 }

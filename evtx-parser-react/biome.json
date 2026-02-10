@@ -103,6 +103,35 @@
 			}
 		},
 		{
+			"includes": ["src/parser/**"],
+			"linter": {
+				"rules": {
+					"complexity": {
+						"noExcessiveCognitiveComplexity": "off",
+						"noExcessiveLinesPerFunction": "off"
+					},
+					"nursery": {
+						"noContinue": "off",
+						"noIncrementDecrement": "off",
+						"useMaxParams": "off"
+					},
+					"performance": {
+						"noBarrelFile": "off",
+						"useTopLevelRegex": "off"
+					},
+					"style": {
+						"noNestedTernary": "off",
+						"noNonNullAssertion": "off",
+						"useForOf": "off",
+						"useNamingConvention": "off"
+					},
+					"suspicious": {
+						"noBitwiseOperators": "off"
+					}
+				}
+			}
+		},
+		{
 			"includes": ["vite.config.ts", "playwright.config.ts"],
 			"linter": {
 				"rules": {
