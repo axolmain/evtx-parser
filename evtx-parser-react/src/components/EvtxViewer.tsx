@@ -17,7 +17,11 @@ import { StatusMessage } from './StatusMessage'
 import { WarningsPanel } from './WarningsPanel'
 
 interface EvtxViewerProps {
-	file: File
+	file?: File
+	parsedResult?: EvtxParseResult
+	fileName?: string
+	fileSize?: number
+	parseTime?: number
 	onParseComplete?: (result: EvtxParseResult, fileName: string) => void
 }
 
@@ -60,31 +64,52 @@ function getStatusMessage(
 
 type ViewMode = 'viewer' | 'table'
 
-export function EvtxViewer({ file, onParseComplete }: EvtxViewerProps) {
+export function EvtxViewer({
+	file,
+	parsedResult,
+	fileName: propFileName,
+	fileSize: propFileSize,
+	parseTime: propParseTime,
+	onParseComplete,
+}: EvtxViewerProps) {
 	const { state, parseFile } = useEvtxParser()
 	const [viewMode, setViewMode] = useState<ViewMode>('viewer')
 	const [searchQuery, setSearchQuery] = useState('')
 	const [selectedLevels, setSelectedLevels] = useState<number[]>([1, 2, 3, 4, 5])
 
-	// Auto-parse file when prop changes
+	// Determine if we're using pre-parsed results or parsing a file
+	const isParsedMode = parsedResult !== undefined
+
+	// Auto-parse file when prop changes (only in file mode)
 	useEffect(() => {
-		if (file) {
+		if (file && !isParsedMode) {
 			parseFile(file)
 		}
-	}, [file, parseFile])
+	}, [file, isParsedMode, parseFile])
 
 	// Call onParseComplete callback when parsing is done
 	useEffect(() => {
-		if (state.status === 'done' && onParseComplete) {
+		if (state.status === 'done' && onParseComplete && !isParsedMode) {
 			onParseComplete(state.result, state.fileName)
 		}
-	}, [state, onParseComplete])
+	}, [state, onParseComplete, isParsedMode])
+
+	// Use either parsed result or state result
+	const effectiveState = isParsedMode
+		? {
+				status: 'done' as const,
+				result: parsedResult,
+				fileName: propFileName || 'unknown',
+				fileSize: propFileSize || 0,
+				parseTime: propParseTime || 0,
+		  }
+		: state
 
 	// Filter records based on search and level filters
 	const filteredRecords = useMemo(() => {
-		if (state.status !== 'done') return []
+		if (effectiveState.status !== 'done') return []
 
-		let filtered = state.result.records
+		let filtered = effectiveState.result.records
 
 		// Filter by level
 		filtered = filtered.filter((r) => selectedLevels.includes(r.level))
@@ -103,17 +128,17 @@ export function EvtxViewer({ file, onParseComplete }: EvtxViewerProps) {
 		}
 
 		return filtered
-	}, [state, searchQuery, selectedLevels])
+	}, [effectiveState, searchQuery, selectedLevels])
 
 	// Calculate level counts for all records (before filtering)
 	const levelCounts = useMemo(() => {
-		if (state.status !== 'done') return {}
+		if (effectiveState.status !== 'done') return {}
 		const counts: Record<number, number> = {}
-		for (const record of state.result.records) {
+		for (const record of effectiveState.result.records) {
 			counts[record.level] = (counts[record.level] || 0) + 1
 		}
 		return counts
-	}, [state])
+	}, [effectiveState])
 
 	const totalRecords = filteredRecords.length
 	const pagination = usePagination(totalRecords)
@@ -124,16 +149,18 @@ export function EvtxViewer({ file, onParseComplete }: EvtxViewerProps) {
 
 	return (
 		<Stack gap="md" style={{ width: '100%' }} align="center">
-			<ProgressBar progress={getProgress(state.status)} />
-			<StatusMessage
-				message={getStatusMessage(state)}
-				type={getStatusType(state)}
-			/>
+			{!isParsedMode && <ProgressBar progress={getProgress(effectiveState.status)} />}
+			{!isParsedMode && (
+				<StatusMessage
+					message={getStatusMessage(effectiveState)}
+					type={getStatusType(effectiveState)}
+				/>
+			)}
 
-			{state.status === 'done' && (
+			{effectiveState.status === 'done' && (
 				<>
 					{/* Summary Bar */}
-					<EventSummary records={state.result.records} />
+					<EventSummary records={effectiveState.result.records} />
 
 					<Divider style={{ width: '100%' }} />
 
@@ -169,12 +196,12 @@ export function EvtxViewer({ file, onParseComplete }: EvtxViewerProps) {
 
 					{/* Actions Row */}
 					<Group gap="sm" style={{ width: '100%' }}>
-						<WarningsPanel warnings={state.result.warnings} />
-						<CopyButton disabled={false} text={state.result.xml} />
+						<WarningsPanel warnings={effectiveState.result.warnings} />
+						<CopyButton disabled={false} text={effectiveState.result.xml} />
 						<DownloadButton
 							disabled={false}
-							fileName={state.fileName}
-							text={state.result.xml}
+							fileName={effectiveState.fileName}
+							text={effectiveState.result.xml}
 						/>
 						<Text size="sm" c="dimmed" ml="auto">
 							Showing {displayRecords.length} of {filteredRecords.length} events
@@ -190,11 +217,11 @@ export function EvtxViewer({ file, onParseComplete }: EvtxViewerProps) {
 					{/* Stats and Pagination Row */}
 					<Group justify="space-between" style={{ width: '100%' }}>
 						<StatsDisplay
-							fileSize={state.fileSize}
-							numChunks={state.result.numChunks}
-							parseTime={state.parseTime}
-							totalRecords={state.result.totalRecords}
-							tplStats={state.result.tplStats}
+							fileSize={effectiveState.fileSize}
+							numChunks={effectiveState.result.numChunks}
+							parseTime={effectiveState.parseTime}
+							totalRecords={effectiveState.result.totalRecords}
+							tplStats={effectiveState.result.tplStats}
 						/>
 						{pagination.showPagination && (
 							<PaginationBar

@@ -5,6 +5,7 @@ import {
 	Code,
 	CopyButton,
 	Group,
+	Paper,
 	ScrollArea,
 	Stack,
 	Text,
@@ -63,7 +64,16 @@ export function JsonViewer({ content, fileName }: JsonViewerProps) {
 	}
 
 	return (
-		<Stack gap="md" style={{ width: '100%', height: '100%' }}>
+		<Stack
+			gap="md"
+			style={{
+				width: '100%',
+				maxHeight: 'calc(100vh - 4rem)',
+				position: 'sticky',
+				top: '2rem',
+			}}
+		>
+			{/* Sticky Header */}
 			<Group justify="space-between">
 				<Group gap="xs">
 					<Title order={3}>{fileName}</Title>
@@ -96,11 +106,23 @@ export function JsonViewer({ content, fileName }: JsonViewerProps) {
 				</Group>
 			</Group>
 
-			<ScrollArea h={600}>
-				<Code block language="json" style={{ fontSize: '0.875rem' }}>
-					{formatted}
-				</Code>
-			</ScrollArea>
+			{/* Scrollable Content */}
+			<Paper
+				withBorder
+				p="md"
+				style={{
+					overflow: 'hidden',
+					display: 'flex',
+					flexDirection: 'column',
+					height: 'calc(100vh - 11rem - 20px)',
+				}}
+			>
+				<ScrollArea h="100%">
+					<Code block language="json" style={{ fontSize: '0.875rem' }}>
+						{formatted}
+					</Code>
+				</ScrollArea>
+			</Paper>
 		</Stack>
 	)
 }

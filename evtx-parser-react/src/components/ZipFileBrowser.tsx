@@ -101,10 +101,11 @@ export function ZipFileBrowser({
 	loadingFile = null,
 }: ZipFileBrowserProps) {
 	// Group files by type
-	const evtxFiles = entries.filter((e) => e.type === 'evtx')
-	const jsonFiles = entries.filter((e) => e.type === 'json')
-	const txtFiles = entries.filter((e) => e.type === 'txt')
-	const unknownFiles = entries.filter((e) => e.type === 'unknown')
+	const evtxFiles: ZipFileEntry[] = entries.filter((e) => e.type === 'evtx')
+	const jsonFiles: ZipFileEntry[] = entries.filter((e) => e.type === 'json')
+	const xmlFiles: ZipFileEntry[] = entries.filter((e) => e.type === 'xml')
+	const txtFiles: ZipFileEntry[] = entries.filter((e) => e.type === 'txt')
+	const unknownFiles: ZipFileEntry[] = entries.filter((e) => e.type === 'unknown')
 
 	return (
 		<Paper
@@ -164,6 +165,29 @@ export function ZipFileBrowser({
 									</Badge>
 								</Group>
 								{jsonFiles.map((entry) => (
+									<FileListItem
+										key={entry.name}
+										entry={entry}
+										active={entry.name === currentFile}
+										isLoading={entry.name === loadingFile}
+										onClick={() => onFileClick(entry.name)}
+									/>
+								))}
+							</Stack>
+						)}
+
+						{/* XML Files */}
+						{xmlFiles.length > 0 && (
+							<Stack gap="xs">
+								<Group gap="xs">
+									<Text size="xs" fw={600} c="dimmed" tt="uppercase">
+										XML Files
+									</Text>
+									<Badge size="xs" variant="light" color="orange">
+										{xmlFiles.length}
+									</Badge>
+								</Group>
+								{xmlFiles.map((entry) => (
 									<FileListItem
 										key={entry.name}
 										entry={entry}

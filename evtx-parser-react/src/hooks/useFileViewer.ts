@@ -3,8 +3,10 @@ import { BlobReader, BlobWriter, ZipReader, type Entry } from '@zip.js/zip.js'
 import type { EvtxParseResult } from '@/parser'
 import { createPool, parseBuffer } from './useEvtxParserHelpers'
 import type { ChunkWorkerPool } from '@/worker/worker-pool'
+import * as dbService from '@/db/service'
+import type { Archive } from '@/db/schema'
 
-export type FileType = 'evtx' | 'json' | 'txt' | 'unknown'
+export type FileType = 'evtx' | 'json' | 'txt' | 'xml' | 'unknown'
 
 export interface ZipFileEntry {
 	name: string
@@ -21,16 +23,19 @@ export interface CurrentFile {
 }
 
 type FileViewerState =
-	| { status: 'idle' }
+	| { status: 'idle'; recentArchives: Archive[] }
 	| { status: 'loading-zip'; fileName: string }
+	| { status: 'loading-archive'; archiveId: string; archiveName: string }
 	| {
 			status: 'zip-loaded'
+			archiveId: string
 			zipFileName: string
 			entries: ZipFileEntry[]
 			currentFile: CurrentFile | null
 	  }
 	| {
 			status: 'viewing-file'
+			archiveId: string
 			zipFileName: string
 			entries: ZipFileEntry[]
 			currentFile: CurrentFile
@@ -41,11 +46,23 @@ type FileViewerState =
 			fileName: string
 			file: File
 	  }
+	| {
+			status: 'standalone-text'
+			fileName: string
+			file: File
+	  }
 	| { status: 'error'; error: string }
 
 interface CacheEntry<T> {
 	data: T
 	accessTime: number
+}
+
+interface EvtxCacheData {
+	result: EvtxParseResult
+	fileSize: number
+	parseTime: number
+	fileName: string
 }
 
 const MAX_EVTX_CACHE = 3
@@ -55,6 +72,7 @@ function detectFileType(fileName: string): FileType {
 	if (lower.endsWith('.evtx')) return 'evtx'
 	if (lower.endsWith('.json')) return 'json'
 	if (lower.endsWith('.txt') || lower.endsWith('.log')) return 'txt'
+	if (lower.endsWith('.xml')) return 'xml'
 	return 'unknown'
 }
 
@@ -63,12 +81,16 @@ function isCancellation(e: unknown): boolean {
 }
 
 export function useFileViewer() {
-	const [state, setState] = useState<FileViewerState>({ status: 'idle' })
+	const [state, setState] = useState<FileViewerState>({
+		status: 'idle',
+		recentArchives: [],
+	})
 	const zipReaderRef = useRef<ZipReader<Blob> | null>(null)
 	const poolRef = useRef<ChunkWorkerPool | null | undefined>(undefined)
+	const currentArchiveIdRef = useRef<string | null>(null)
 
 	// Caches with access time tracking
-	const evtxCacheRef = useRef<Map<string, CacheEntry<EvtxParseResult>>>(
+	const evtxCacheRef = useRef<Map<string, CacheEntry<EvtxCacheData>>>(
 		new Map()
 	)
 	const jsonCacheRef = useRef<Map<string, CacheEntry<unknown>>>(new Map())
@@ -91,6 +113,21 @@ export function useFileViewer() {
 		},
 		[]
 	)
+
+	// Load recent archives on mount
+	useEffect(() => {
+		async function loadArchives() {
+			try {
+				const archives = await dbService.getAllArchives()
+				setState((prev) =>
+					prev.status === 'idle' ? { ...prev, recentArchives: archives } : prev
+				)
+			} catch (error) {
+				console.error('Failed to load archives:', error)
+			}
+		}
+		loadArchives()
+	}, [])
 
 	const getCacheKey = useCallback(
 		(zipFileName: string, entryName: string) => `${zipFileName}::${entryName}`,
@@ -175,8 +212,53 @@ export function useFileViewer() {
 					return
 				}
 
+				// Save archive to IndexedDB and extract all files
+				const totalSize = fileEntries.reduce((sum, e) => sum + e.size, 0)
+				const archiveId = await dbService.saveArchive(
+					file.name,
+					totalSize,
+					[] // Will update with file IDs after extraction
+				)
+				currentArchiveIdRef.current = archiveId
+
+				// Extract and save all files to IndexedDB
+				const fileIds: string[] = []
+				for (const entry of fileEntries) {
+					try {
+						// Type guard: check if entry has getData method (not a directory)
+						if (!('getData' in entry.entry) || typeof entry.entry.getData !== 'function') {
+							console.warn(`Skipping ${entry.name}: no getData method`)
+							continue
+						}
+
+						const blob = await entry.entry.getData(new BlobWriter())
+						const fileId = await dbService.saveFile(
+							archiveId,
+							entry.name,
+							entry.type,
+							entry.size,
+							blob
+						)
+						fileIds.push(fileId)
+					} catch (error) {
+						console.error(`Failed to extract ${entry.name}:`, error)
+					}
+				}
+
+				// Update archive with file IDs
+				const archive = await dbService.getArchive(archiveId)
+				if (archive) {
+					archive.files = fileIds
+					// Note: Dexie doesn't have a direct update for arrays, so we'll handle this in the service
+				}
+
+				// Close zip reader now that everything is extracted
+				await reader.close()
+				zipReaderRef.current = null
+
 				setState({
 					status: 'zip-loaded',
+					archiveId,
 					zipFileName: file.name,
 					entries: fileEntries,
 					currentFile: null,
@@ -189,18 +271,6 @@ export function useFileViewer() {
 			}
 		},
 		[clearCaches]
-	)
-
-	const extractEntry = useCallback(
-		async (entry: Entry): Promise<ArrayBuffer> => {
-			if (!entry.getData) {
-				throw new Error('Entry has no getData method')
-			}
-
-			const blob = await entry.getData(new BlobWriter())
-			return blob.arrayBuffer()
-		},
-		[]
 	)
 
 	const viewFile = useCallback(
@@ -222,6 +292,7 @@ export function useFileViewer() {
 
 			setState({
 				status: 'viewing-file',
+				archiveId: state.archiveId,
 				zipFileName: state.zipFileName,
 				entries: state.entries,
 				currentFile,
@@ -230,16 +301,18 @@ export function useFileViewer() {
 
 			try {
 				const cacheKey = getCacheKey(state.zipFileName, entryName)
+				const fileId = dbService.generateFileId(state.archiveId, entryName)
 
 				switch (entry.type) {
 					case 'evtx': {
-						// Check cache first
+						// Check memory cache first
 						const cached = evtxCacheRef.current.get(cacheKey)
 						if (cached) {
 							// Update access time
 							cached.accessTime = Date.now()
 							setState({
 								status: 'viewing-file',
+								archiveId: state.archiveId,
 								zipFileName: state.zipFileName,
 								entries: state.entries,
 								currentFile,
@@ -248,19 +321,73 @@ export function useFileViewer() {
 							return
 						}
 
-						// Extract and parse
-						const buffer = await extractEntry(entry.entry)
-						const { result } = await parseBuffer(buffer, getPool())
+						// Check IndexedDB for parsed data
+						const storedFile = await dbService.getFile(fileId)
+						if (storedFile?.parsedData) {
+							const parsedData = storedFile.parsedData as EvtxCacheData
+							// Store in memory cache
+							evtxCacheRef.current.set(cacheKey, {
+								data: parsedData,
+								accessTime: Date.now(),
+							})
+							evictOldestEvtxCache()
 
-						// Store in cache with LRU eviction
+							setState({
+								status: 'viewing-file',
+								archiveId: state.archiveId,
+								zipFileName: state.zipFileName,
+								entries: state.entries,
+								currentFile,
+								isLoading: false,
+							})
+							return
+						}
+
+						// Need to parse - load blob from IndexedDB
+						if (!storedFile) {
+							throw new Error('File not found in database')
+						}
+
+						const buffer = await storedFile.blob.arrayBuffer()
+						const { result, parseTime } = await parseBuffer(buffer, getPool())
+
+						const evtxData: EvtxCacheData = {
+							result,
+							fileSize: buffer.byteLength,
+							parseTime,
+							fileName: entry.name.replace(/\.evtx$/i, ''),
+						}
+
+						// Store in memory cache
 						evtxCacheRef.current.set(cacheKey, {
-							data: result,
+							data: evtxData,
 							accessTime: Date.now(),
 						})
 						evictOldestEvtxCache()
 
+						// Save parsed data to IndexedDB
+						await dbService.updateFileParsedData(fileId, evtxData)
+
+						// Index events in background (non-blocking)
+						const isIndexed = await dbService.isFileIndexed(fileId)
+						if (!isIndexed) {
+							// Index in background
+							dbService
+								.indexEvtxEvents(
+									fileId,
+									state.archiveId,
+									state.zipFileName,
+									entry.name,
+									result.records
+								)
+								.catch((error) => {
+									console.error('Failed to index events:', error)
+								})
+						}
+
 						setState({
 							status: 'viewing-file',
+							archiveId: state.archiveId,
 							zipFileName: state.zipFileName,
 							entries: state.entries,
 							currentFile,
@@ -270,12 +397,13 @@ export function useFileViewer() {
 					}
 
 					case 'json': {
-						// Check cache first
+						// Check memory cache first
 						const cached = jsonCacheRef.current.get(cacheKey)
 						if (cached) {
 							cached.accessTime = Date.now()
 							setState({
 								status: 'viewing-file',
+								archiveId: state.archiveId,
 								zipFileName: state.zipFileName,
 								entries: state.entries,
 								currentFile,
@@ -284,8 +412,31 @@ export function useFileViewer() {
 							return
 						}
 
-						// Extract and parse JSON
-						const buffer = await extractEntry(entry.entry)
+						// Check IndexedDB
+						const storedFile = await dbService.getFile(fileId)
+						if (storedFile?.parsedData) {
+							jsonCacheRef.current.set(cacheKey, {
+								data: storedFile.parsedData,
+								accessTime: Date.now(),
+							})
+
+							setState({
+								status: 'viewing-file',
+								archiveId: state.archiveId,
+								zipFileName: state.zipFileName,
+								entries: state.entries,
+								currentFile,
+								isLoading: false,
+							})
+							return
+						}
+
+						// Parse from blob
+						if (!storedFile) {
+							throw new Error('File not found in database')
+						}
+
+						const buffer = await storedFile.blob.arrayBuffer()
 						const text = new TextDecoder().decode(buffer)
 						const json = JSON.parse(text)
 
@@ -294,8 +445,12 @@ export function useFileViewer() {
 							accessTime: Date.now(),
 						})
 
+						// Save parsed data to IndexedDB
+						await dbService.updateFileParsedData(fileId, json)
+
 						setState({
 							status: 'viewing-file',
+							archiveId: state.archiveId,
 							zipFileName: state.zipFileName,
 							entries: state.entries,
 							currentFile,
@@ -304,13 +459,15 @@ export function useFileViewer() {
 						break
 					}
 
-					case 'txt': {
-						// Check cache first
+					case 'txt':
+					case 'xml': {
+						// Check memory cache first
 						const cached = textCacheRef.current.get(cacheKey)
 						if (cached) {
 							cached.accessTime = Date.now()
 							setState({
 								status: 'viewing-file',
+								archiveId: state.archiveId,
 								zipFileName: state.zipFileName,
 								entries: state.entries,
 								currentFile,
@@ -319,8 +476,31 @@ export function useFileViewer() {
 							return
 						}
 
-						// Extract text
-						const buffer = await extractEntry(entry.entry)
+						// Check IndexedDB
+						const storedFile = await dbService.getFile(fileId)
+						if (storedFile?.parsedData) {
+							textCacheRef.current.set(cacheKey, {
+								data: storedFile.parsedData as string,
+								accessTime: Date.now(),
+							})
+
+							setState({
+								status: 'viewing-file',
+								archiveId: state.archiveId,
+								zipFileName: state.zipFileName,
+								entries: state.entries,
+								currentFile,
+								isLoading: false,
+							})
+							return
+						}
+
+						// Parse from blob
+						if (!storedFile) {
+							throw new Error('File not found in database')
+						}
+
+						const buffer = await storedFile.blob.arrayBuffer()
 						const text = new TextDecoder().decode(buffer)
 
 						textCacheRef.current.set(cacheKey, {
@@ -328,8 +508,12 @@ export function useFileViewer() {
 							accessTime: Date.now(),
 						})
 
+						// Save parsed data to IndexedDB
+						await dbService.updateFileParsedData(fileId, text)
+
 						setState({
 							status: 'viewing-file',
+							archiveId: state.archiveId,
 							zipFileName: state.zipFileName,
 							entries: state.entries,
 							currentFile,
@@ -355,12 +539,63 @@ export function useFileViewer() {
 				})
 			}
 		},
-		[state, getCacheKey, extractEntry, getPool, evictOldestEvtxCache]
+		[state, getCacheKey, getPool, evictOldestEvtxCache]
 	)
+
+	const loadArchive = useCallback(async (archiveId: string) => {
+		try {
+			const archive = await dbService.getArchive(archiveId)
+			if (!archive) {
+				setState({ status: 'error', error: 'Archive not found' })
+				return
+			}
+
+			setState({
+				status: 'loading-archive',
+				archiveId,
+				archiveName: archive.name,
+			})
+
+			// Load all files from archive
+			const files = await dbService.getFilesByArchive(archiveId)
+
+			// Convert to ZipFileEntry format (without Entry objects)
+			const fileEntries: ZipFileEntry[] = files.map((file) => ({
+				name: file.name,
+				size: file.size,
+				compressedSize: file.size,
+				type: file.type,
+				entry: null as any, // Not needed when loading from DB
+			}))
+
+			currentArchiveIdRef.current = archiveId
+
+			setState({
+				status: 'zip-loaded',
+				archiveId,
+				zipFileName: archive.name,
+				entries: fileEntries,
+				currentFile: null,
+			})
+		} catch (error) {
+			setState({
+				status: 'error',
+				error: `Failed to load archive: ${error instanceof Error ? error.message : String(error)}`,
+			})
+		}
+	}, [])
 
 	const viewStandaloneEvtx = useCallback((file: File) => {
 		setState({
 			status: 'standalone-evtx',
+			fileName: file.name,
+			file,
+		})
+	}, [])
+
+	const viewStandaloneText = useCallback((file: File) => {
+		setState({
+			status: 'standalone-text',
 			fileName: file.name,
 			file,
 		})
@@ -371,7 +606,7 @@ export function useFileViewer() {
 			zipFileName: string,
 			entryName: string,
 			type: FileType
-		): EvtxParseResult | unknown | string | null => {
+		): EvtxCacheData | unknown | string | null => {
 			const cacheKey = getCacheKey(zipFileName, entryName)
 
 			switch (type) {
@@ -380,6 +615,7 @@ export function useFileViewer() {
 				case 'json':
 					return jsonCacheRef.current.get(cacheKey)?.data || null
 				case 'txt':
+				case 'xml':
 					return textCacheRef.current.get(cacheKey)?.data || null
 				default:
 					return null
@@ -388,7 +624,7 @@ export function useFileViewer() {
 		[getCacheKey]
 	)
 
-	const reset = useCallback(() => {
+	const reset = useCallback(async () => {
 		const pool = poolRef.current
 		if (pool) pool.cancel()
 
@@ -396,20 +632,27 @@ export function useFileViewer() {
 		zipReaderRef.current = null
 
 		clearCaches()
-		setState({ status: 'idle' })
+		currentArchiveIdRef.current = null
+
+		// Reload archives list
+		const archives = await dbService.getAllArchives()
+		setState({ status: 'idle', recentArchives: archives })
 	}, [clearCaches])
 
-	const clearError = useCallback(() => {
+	const clearError = useCallback(async () => {
 		if (state.status === 'error') {
-			setState({ status: 'idle' })
+			const archives = await dbService.getAllArchives()
+			setState({ status: 'idle', recentArchives: archives })
 		}
 	}, [state])
 
 	return {
 		state,
 		loadZipFile,
+		loadArchive,
 		viewFile,
 		viewStandaloneEvtx,
+		viewStandaloneText,
 		getCachedContent,
 		clearCaches,
 		reset,

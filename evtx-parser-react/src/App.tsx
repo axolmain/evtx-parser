@@ -1,5 +1,6 @@
 import {ErrorBoundary, type FallbackProps} from 'react-error-boundary'
-import {EvtxParser} from '@/components/EvtxParser'
+import {FileViewer} from '@/components/FileViewer'
+import {GlobalSearch} from '@/components/GlobalSearch'
 import {Center, MantineProvider, Text} from '@mantine/core'
 import '@mantine/core/styles.css'
 import '@mantine/dropzone/styles.css'
@@ -21,7 +22,8 @@ export function App() {
 	return (
 		<ErrorBoundary fallbackRender={renderError}>
 			<MantineProvider defaultColorScheme="dark">
-				<EvtxParser />
+				<GlobalSearch />
+				<FileViewer />
 			</MantineProvider>
 		</ErrorBoundary>
 	)

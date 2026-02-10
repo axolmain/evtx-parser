@@ -31,7 +31,16 @@ function downloadFile(content: string, fileName: string) {
 
 export function TextViewer({ content, fileName }: TextViewerProps) {
 	return (
-		<Stack gap="md" style={{ width: '100%', height: '100%' }}>
+		<Stack
+			gap="md"
+			style={{
+				width: '100%',
+				maxHeight: 'calc(100vh - 4rem)',
+				position: 'sticky',
+				top: '2rem',
+			}}
+		>
+			{/* Sticky Header */}
 			<Group justify="space-between">
 				<Title order={3}>{fileName}</Title>
 				<Group gap="xs">
@@ -59,8 +68,18 @@ export function TextViewer({ content, fileName }: TextViewerProps) {
 				</Group>
 			</Group>
 
-			<Paper withBorder p="md" style={{ flex: 1 }}>
-				<ScrollArea h={600}>
+			{/* Scrollable Content */}
+			<Paper
+				withBorder
+				p="md"
+				style={{
+					overflow: 'hidden',
+					display: 'flex',
+					flexDirection: 'column',
+					height: 'calc(100vh - 11rem - 20px)',
+				}}
+			>
+				<ScrollArea h="100%">
 					<Text
 						component="pre"
 						ff="monospace"
