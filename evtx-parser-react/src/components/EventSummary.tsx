@@ -43,8 +43,9 @@ export function EventSummary({records}: Properties) {
 				{[1, 2, 3, 4, 5].map(level => {
 					const count = levelCounts[level] || 0
 					if (count === 0) return null
+					const color = LEVEL_COLORS[level]
 					return (
-						<Badge key={level} color={LEVEL_COLORS[level]} size="lg" variant="light">
+						<Badge key={level} {...(color && { color })} size="lg" variant="light">
 							{count} {LEVEL_NAMES[level]}
 						</Badge>
 					)

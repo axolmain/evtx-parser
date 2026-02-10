@@ -1,10 +1,11 @@
 import {Badge, Button, Checkbox, Code, Collapse, Group, Popover, ScrollArea, Stack, Table} from '@mantine/core'
 import {useLocalStorage} from '@mantine/hooks'
-import {useState} from 'react'
+import {useEffect, useRef, useState} from 'react'
 import type {ParsedEventRecord} from '@/parser'
 
 interface Properties {
 	records: ParsedEventRecord[]
+	selectedRecordId: number | null
 }
 
 const LEVEL_COLORS: Record<number, string> = {
@@ -43,13 +44,26 @@ const ALL_COLUMNS: ColumnConfig[] = [
 
 const DEFAULT_VISIBLE: (keyof ParsedEventRecord | "expand")[] = ALL_COLUMNS.filter((col: ColumnConfig) => col.defaultVisible).map((col: ColumnConfig) => col.key)
 
-export function EventsTable({records}: Properties) {
+export function EventsTable({records, selectedRecordId}: Properties) {
 	const [expandedRow, setExpandedRow] = useState<number | null>(null)
 	const [visibleColumns, setVisibleColumns] = useLocalStorage<string[]>({
 		key: 'evtx-visible-columns',
 		defaultValue: DEFAULT_VISIBLE
 	})
 	const [popoverOpened, setPopoverOpened] = useState(false)
+	const rowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map())
+
+	// Scroll to and expand row when selectedRecordId changes
+	useEffect(() => {
+		if (selectedRecordId !== null && selectedRecordId !== undefined) {
+			setExpandedRow(selectedRecordId)
+			// Scroll to the row
+			const element = rowRefs.current.get(selectedRecordId)
+			if (element) {
+				element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+			}
+		}
+	}, [selectedRecordId])
 
 	const toggleColumn = (columnKey: string) => {
 		setVisibleColumns(prev =>
@@ -119,6 +133,13 @@ export function EventsTable({records}: Properties) {
 							<>
 								<Table.Tr
 									key={record.recordId}
+									ref={(el) => {
+										if (el) {
+											rowRefs.current.set(record.recordId, el)
+										} else {
+											rowRefs.current.delete(record.recordId)
+										}
+									}}
 									onClick={() =>
 										setExpandedRow(expandedRow === record.recordId ? null : record.recordId)
 									}

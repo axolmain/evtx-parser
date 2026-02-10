@@ -646,6 +646,31 @@ export function useFileViewer() {
 		}
 	}, [state])
 
+	const navigateToEvent = useCallback(async (archiveId: string, fileName: string, recordId: number) => {
+		try {
+			// First check if we're already viewing this archive
+			if (
+				(state.status === 'zip-loaded' || state.status === 'viewing-file') &&
+				state.archiveId === archiveId
+			) {
+				// Same archive, just switch to the file
+				await viewFile(fileName)
+			} else {
+				// Different archive, load it first
+				await loadArchive(archiveId)
+				// Wait a bit for state to update, then view the file
+				await new Promise(resolve => setTimeout(resolve, 200))
+				await viewFile(fileName)
+			}
+
+			// Scroll to event will be handled by the component via selectedRecordId
+			return recordId
+		} catch (error) {
+			console.error('Failed to navigate to event:', error)
+			throw error
+		}
+	}, [state, viewFile, loadArchive])
+
 	return {
 		state,
 		loadZipFile,
@@ -657,6 +682,7 @@ export function useFileViewer() {
 		clearCaches,
 		reset,
 		clearError,
+		navigateToEvent,
 		cacheStats: {
 			evtx: evtxCacheRef.current.size,
 			json: jsonCacheRef.current.size,

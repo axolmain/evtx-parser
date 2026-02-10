@@ -1,4 +1,3 @@
-import { Badge, Group, Highlight, Stack, Text } from '@mantine/core'
 import { Spotlight, spotlight } from '@mantine/spotlight'
 import {
 	IconAlertCircle,
@@ -12,15 +11,7 @@ import type { StoredEvent } from '@/db/schema'
 import * as dbService from '@/db/service'
 
 interface GlobalSearchProps {
-	onEventSelect?: (event: StoredEvent) => void
-}
-
-const LEVEL_COLORS: Record<number, string> = {
-	1: 'red',
-	2: 'orange',
-	3: 'yellow',
-	4: 'blue',
-	5: 'gray',
+	onEventSelect?: (archiveId: string, fileName: string, recordId: number) => void | Promise<void>
 }
 
 const LEVEL_ICONS: Record<number, React.ReactNode> = {
@@ -69,7 +60,7 @@ export function GlobalSearch({ onEventSelect }: GlobalSearchProps) {
 
 	const handleEventSelect = (event: StoredEvent) => {
 		spotlight.close()
-		onEventSelect?.(event)
+		onEventSelect?.(event.archiveId, event.fileName, event.recordId)
 	}
 
 	const formatTimestamp = (timestamp: string) => {

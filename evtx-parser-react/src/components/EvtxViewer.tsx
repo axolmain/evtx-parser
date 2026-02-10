@@ -23,6 +23,7 @@ interface EvtxViewerProps {
 	fileSize?: number
 	parseTime?: number
 	onParseComplete?: (result: EvtxParseResult, fileName: string) => void
+	selectedRecordId: number | null
 }
 
 type StatusType = 'error' | 'info' | 'success'
@@ -71,6 +72,7 @@ export function EvtxViewer({
 	fileSize: propFileSize,
 	parseTime: propParseTime,
 	onParseComplete,
+	selectedRecordId,
 }: EvtxViewerProps) {
 	const { state, parseFile } = useEvtxParser()
 	const [viewMode, setViewMode] = useState<ViewMode>('viewer')
@@ -211,8 +213,8 @@ export function EvtxViewer({
 					<Divider style={{ width: '100%' }} />
 
 					{/* Viewer/Table Content */}
-					{viewMode === 'viewer' && <EventViewer records={displayRecords} />}
-					{viewMode === 'table' && <EventsTable records={displayRecords} />}
+					{viewMode === 'viewer' && <EventViewer records={displayRecords} selectedRecordId={selectedRecordId} />}
+					{viewMode === 'table' && <EventsTable records={displayRecords} selectedRecordId={selectedRecordId} />}
 
 					{/* Stats and Pagination Row */}
 					<Group justify="space-between" style={{ width: '100%' }}>

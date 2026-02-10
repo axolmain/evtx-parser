@@ -1,11 +1,12 @@
 import {ActionIcon, Badge, Box, Button, Code, Divider, Group, Paper, ScrollArea, Stack, Tabs, Text, Title, Tooltip} from '@mantine/core'
 import {useClipboard} from '@mantine/hooks'
 import {IconAlertCircle, IconAlertTriangle, IconCheck, IconCopy, IconInfoCircle, IconX} from '@tabler/icons-react'
-import {useState} from 'react'
+import {useEffect, useRef, useState} from 'react'
 import type {ParsedEventRecord} from '@/parser'
 
 interface Properties {
 	records: ParsedEventRecord[]
+	selectedRecordId: number | null
 }
 
 const LEVEL_COLORS: Record<number, string> = {
@@ -40,11 +41,27 @@ function formatRelativeTime(timestamp: string): string {
 	return date.toLocaleDateString('en-US', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})
 }
 
-export function EventViewer({records}: Properties) {
+export function EventViewer({records, selectedRecordId}: Properties) {
 	const [selectedEvent, setSelectedEvent] = useState<ParsedEventRecord | null>(
 		records.length > 0 ? records[0]! : null
 	)
 	const clipboard = useClipboard({timeout: 2000})
+	const eventRefs = useRef<Map<number, HTMLDivElement>>(new Map())
+
+	// Scroll to and select event when selectedRecordId changes
+	useEffect(() => {
+		if (selectedRecordId !== null && selectedRecordId !== undefined) {
+			const event = records.find(r => r.recordId === selectedRecordId)
+			if (event) {
+				setSelectedEvent(event)
+				// Scroll to the event
+				const element = eventRefs.current.get(selectedRecordId)
+				if (element) {
+					element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+				}
+			}
+		}
+	}, [selectedRecordId, records])
 
 	if (records.length === 0) {
 		return null
@@ -87,6 +104,13 @@ export function EventViewer({records}: Properties) {
 							return (
 								<Paper
 									key={record.recordId}
+									ref={(el) => {
+										if (el) {
+											eventRefs.current.set(record.recordId, el)
+										} else {
+											eventRefs.current.delete(record.recordId)
+										}
+									}}
 									p="md"
 									style={{
 										cursor: 'pointer',
@@ -165,7 +189,7 @@ export function EventViewer({records}: Properties) {
 										<ActionIcon
 											variant="default"
 											onClick={copyEventAsJson}
-											color={clipboard.copied ? 'green' : undefined}
+											{...(clipboard.copied && { color: 'green' })}
 										>
 											{clipboard.copied ? <IconCheck size={18} /> : <IconCopy size={18} />}
 										</ActionIcon>
@@ -291,7 +315,7 @@ function DetailRow({label, value, mono}: DetailRowProps) {
 			<Text size="sm" fw={500} miw={140}>
 				{label}:
 			</Text>
-			<Text size="sm" ff={mono ? 'monospace' : undefined} style={{wordBreak: 'break-word', flex: 1}}>
+			<Text size="sm" {...(mono && { ff: 'monospace' })} style={{wordBreak: 'break-word', flex: 1}}>
 				{value}
 			</Text>
 		</Group>

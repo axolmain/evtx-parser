@@ -137,7 +137,7 @@ export function parseEventXml(xmlString: string): {
 						// Handle nested UserData structures
 						for (const [subKey, subValue] of Object.entries(value)) {
 							if (!subKey.startsWith('@_')) {
-								const textValue = getTextValue(subValue)
+								const textValue = getTextValue(subValue as string | number | { '#text': string } | undefined)
 								if (textValue) {
 									eventDataPairs.push(`${subKey}: ${textValue}`)
 								}

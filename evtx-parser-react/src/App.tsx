@@ -1,7 +1,10 @@
 import {ErrorBoundary, type FallbackProps} from 'react-error-boundary'
 import {FileViewer} from '@/components/FileViewer'
 import {GlobalSearch} from '@/components/GlobalSearch'
+import {PWAPrompt} from '@/components/PWAPrompt'
 import {Center, MantineProvider, Text} from '@mantine/core'
+import {useFileViewer} from '@/hooks/useFileViewer'
+import {useState} from 'react'
 import '@mantine/core/styles.css'
 import '@mantine/dropzone/styles.css'
 // import '@mantine/modals/styles.css'
@@ -18,13 +21,30 @@ function renderError({error}: FallbackProps) {
 	)
 }
 
+function AppContent() {
+	const viewer = useFileViewer()
+	const [selectedRecordId, setSelectedRecordId] = useState<number | null>(null)
+
+	const handleEventSelect = async (archiveId: string, fileName: string, recordId: number) => {
+		await viewer.navigateToEvent(archiveId, fileName, recordId)
+		setSelectedRecordId(recordId)
+	}
+
+	return (
+		<>
+			<GlobalSearch onEventSelect={handleEventSelect} />
+			<FileViewer viewer={viewer} selectedRecordId={selectedRecordId} />
+			<PWAPrompt />
+		</>
+	)
+}
+
 export function App() {
 	return (
-		<ErrorBoundary fallbackRender={renderError}>
-			<MantineProvider defaultColorScheme="dark">
-				<GlobalSearch />
-				<FileViewer />
-			</MantineProvider>
-		</ErrorBoundary>
+		<MantineProvider defaultColorScheme="dark">
+			<ErrorBoundary fallbackRender={renderError}>
+				<AppContent />
+			</ErrorBoundary>
+		</MantineProvider>
 	)
 }

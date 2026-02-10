@@ -118,7 +118,7 @@ export function JsonViewer({ content, fileName }: JsonViewerProps) {
 				}}
 			>
 				<ScrollArea h="100%">
-					<Code block language="json" style={{ fontSize: '0.875rem' }}>
+					<Code block style={{ fontSize: '0.875rem' }}>
 						{formatted}
 					</Code>
 				</ScrollArea>

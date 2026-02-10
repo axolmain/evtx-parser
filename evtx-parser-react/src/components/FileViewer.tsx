@@ -121,8 +121,12 @@ function StandaloneTextViewer({ file, fileName, onReset }: { file: File; fileNam
 	)
 }
 
-export function FileViewer() {
-	const viewer = useFileViewer()
+interface FileViewerProps {
+	viewer: ReturnType<typeof useFileViewer>
+	selectedRecordId: number | null
+}
+
+export function FileViewer({ viewer, selectedRecordId }: FileViewerProps) {
 
 	const handleDrop = (files: File[]) => {
 		const file = files[0]
@@ -185,7 +189,7 @@ export function FileViewer() {
 								Load Another File
 							</Button>
 						</Group>
-						<EvtxViewer file={viewer.state.file} />
+						<EvtxViewer file={viewer.state.file} selectedRecordId={selectedRecordId} />
 					</Stack>
 				</Box>
 			)
@@ -328,6 +332,7 @@ export function FileViewer() {
 												fileName={evtxData.fileName}
 												fileSize={evtxData.fileSize}
 												parseTime={evtxData.parseTime}
+												selectedRecordId={selectedRecordId}
 											/>
 										)
 									})()}
