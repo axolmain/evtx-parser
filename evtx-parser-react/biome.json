@@ -103,7 +103,7 @@
 			}
 		},
 		{
-			"includes": ["src/parser/**"],
+			"includes": ["src/parser/**", "src/worker/**"],
 			"linter": {
 				"rules": {
 					"complexity": {

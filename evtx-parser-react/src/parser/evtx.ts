@@ -1,7 +1,7 @@
 import {parseBinXmlDocument} from './binxml'
 import {HEX} from './constants'
 import {formatChunkHeaderComment, formatRecordComment} from './format'
-import {hex32} from './helpers'
+import {formatGuid, hex32} from './helpers'
 import type {
 	ChunkHeader,
 	EvtxParseResult,
@@ -181,18 +181,24 @@ export function parseChunk(
 	return {header, records}
 }
 
-export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
-	const dv = new DataView(buffer)
-	const fileHeader = parseFileHeader(buffer, dv)
-
-	// Scan for chunks by signature
-	const chunkOffsets: number[] = []
+export function discoverChunkOffsets(
+	buffer: ArrayBuffer,
+	fileHeader: FileHeader
+): number[] {
+	const offsets: number[] = []
 	let off = fileHeader.headerBlockSize
 	while (off + 65_536 <= buffer.byteLength) {
 		const csig = new TextDecoder().decode(new Uint8Array(buffer, off, 8))
-		if (csig.startsWith('ElfChnk')) chunkOffsets.push(off)
+		if (csig.startsWith('ElfChnk')) offsets.push(off)
 		off += 65_536
 	}
+	return offsets
+}
+
+export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
+	const dv = new DataView(buffer)
+	const fileHeader = parseFileHeader(buffer, dv)
+	const chunkOffsets = discoverChunkOffsets(buffer, fileHeader)
 
 	const tplStats: TemplateStats = {
 		definitions: {},
@@ -223,6 +229,45 @@ export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
 		const chunkHeaderText = `${formatChunkHeaderComment(ci, chunk.header)}\n\n`
 
 		const chunkDv = new DataView(buffer, chunkOffset, 65_536)
+
+		// Pre-load template definitions from chunk header's template pointer table
+		for (let i = 0; i < chunk.header.templatePointers.length; i++) {
+			const tplOffset = chunk.header.templatePointers[i]
+			if (tplOffset !== 0 && !tplStats.defsByOffset[tplOffset]) {
+				try {
+					// Verify offset is within chunk bounds
+					if (tplOffset + 24 > 65_536) continue
+
+					// Read 24-byte template definition header
+					// [0-3]   next template def offset
+					// [4-19]  GUID
+					// [20-23] dataSize
+					const guidBytes = new Uint8Array(
+						chunkDv.buffer,
+						chunkDv.byteOffset + tplOffset + 4,
+						16
+					)
+					const guid = formatGuid(guidBytes)
+					const dataSize = chunkDv.getUint32(tplOffset + 20, true)
+
+					// Register the template definition
+					tplStats.defsByOffset[tplOffset] = {
+						guid,
+						defDataOffset: tplOffset,
+						dataSize,
+						firstSeenRecord: 0 // pre-loaded from chunk header
+					}
+
+					// Track unique definitions by GUID
+					if (!tplStats.definitions[guid]) {
+						tplStats.definitions[guid] = tplStats.defsByOffset[tplOffset]!
+						tplStats.definitionCount++
+					}
+				} catch {
+					// Invalid template pointer, skip
+				}
+			}
+		}
 
 		for (let ri = 0; ri < chunk.records.length; ri++) {
 			const r = chunk.records[ri]!

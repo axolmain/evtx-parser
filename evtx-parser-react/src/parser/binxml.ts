@@ -581,6 +581,9 @@ export function parseTemplateInstance(
 	}
 
 	if (tplStats && !tplFound) {
+		if (tplStats.missingCount < 5) {
+			console.log(`Missing template: record ${tplStats.currentRecordId}, offset 0x${defDataOffset.toString(16)}, guid=${guidStr}, dataSize=${dataSize}`)
+		}
 		tplStats.missingRefs.push({
 			recordId: tplStats.currentRecordId,
 			guid: guidStr || '(unknown)',
