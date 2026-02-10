@@ -32,7 +32,7 @@ const ALL_COLUMNS: ColumnConfig[] = [
 	{key: 'keywords', label: 'Keywords', defaultVisible: false},
 	{key: 'version', label: 'Version', defaultVisible: false},
 	{key: 'channel', label: 'Channel', defaultVisible: true},
-	{key: 'computer', label: 'Computer', defaultVisible: true},
+	{key: 'computer', label: 'Computer', defaultVisible: false},
 	{key: 'processId', label: 'Process ID', defaultVisible: false},
 	{key: 'threadId', label: 'Thread ID', defaultVisible: false},
 	{key: 'securityUserId', label: 'Security UserID', defaultVisible: false},
@@ -41,7 +41,7 @@ const ALL_COLUMNS: ColumnConfig[] = [
 	{key: 'eventData', label: 'Event Data', defaultVisible: true}
 ]
 
-const DEFAULT_VISIBLE = ALL_COLUMNS.filter(col => col.defaultVisible).map(col => col.key)
+const DEFAULT_VISIBLE: (keyof ParsedEventRecord | "expand")[] = ALL_COLUMNS.filter((col: ColumnConfig) => col.defaultVisible).map((col: ColumnConfig) => col.key)
 
 export function EventsTable({records}: Properties) {
 	const [expandedRow, setExpandedRow] = useState<number | null>(null)
@@ -168,20 +168,9 @@ export function EventsTable({records}: Properties) {
 									)}
 									{isColumnVisible('eventData') && (
 										<Table.Td>
-											{record.eventData && (
-												<Code
-													block
-													style={{
-														fontSize: '0.72rem',
-														maxHeight: '150px',
-														overflow: 'auto',
-														whiteSpace: 'pre-wrap',
-														wordBreak: 'break-word'
-													}}
-												>
-													{record.eventData}
-												</Code>
-											)}
+											<span style={{ whiteSpace: 'pre-wrap' }}>
+											   {record.eventData}
+											</span>
 										</Table.Td>
 									)}
 								</Table.Tr>

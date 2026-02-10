@@ -1,5 +1,6 @@
-import {Badge, Box, Code, Divider, Group, Paper, ScrollArea, Stack, Tabs, Text, Title} from '@mantine/core'
-import {IconAlertCircle, IconAlertTriangle, IconInfoCircle, IconX} from '@tabler/icons-react'
+import {ActionIcon, Badge, Box, Button, Code, Divider, Group, Paper, ScrollArea, Stack, Tabs, Text, Title, Tooltip} from '@mantine/core'
+import {useClipboard} from '@mantine/hooks'
+import {IconAlertCircle, IconAlertTriangle, IconCheck, IconCopy, IconInfoCircle, IconX} from '@tabler/icons-react'
 import {useState} from 'react'
 import type {ParsedEventRecord} from '@/parser'
 
@@ -23,13 +24,51 @@ const LEVEL_ICONS: Record<number, React.ReactNode> = {
 	5: <IconInfoCircle size={18} color="var(--mantine-color-gray-6)" />
 }
 
+function formatRelativeTime(timestamp: string): string {
+	const date = new Date(timestamp)
+	const now = new Date()
+	const diffMs = now.getTime() - date.getTime()
+	const diffMins = Math.floor(diffMs / 60000)
+	const diffHours = Math.floor(diffMs / 3600000)
+	const diffDays = Math.floor(diffMs / 86400000)
+
+	if (diffMins < 1) return 'Just now'
+	if (diffMins < 60) return `${diffMins}m ago`
+	if (diffHours < 24) return `${diffHours}h ago`
+	if (diffDays < 7) return `${diffDays}d ago`
+
+	return date.toLocaleDateString('en-US', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})
+}
+
 export function EventViewer({records}: Properties) {
 	const [selectedEvent, setSelectedEvent] = useState<ParsedEventRecord | null>(
 		records.length > 0 ? records[0]! : null
 	)
+	const clipboard = useClipboard({timeout: 2000})
 
 	if (records.length === 0) {
 		return null
+	}
+
+	const copyEventAsJson = () => {
+		if (!selectedEvent) return
+		const json = JSON.stringify({
+			recordId: selectedEvent.recordId,
+			timestamp: selectedEvent.timestamp,
+			eventId: selectedEvent.eventId,
+			level: selectedEvent.levelText,
+			provider: selectedEvent.provider,
+			computer: selectedEvent.computer,
+			channel: selectedEvent.channel,
+			eventData: selectedEvent.eventData,
+			xml: selectedEvent.xml
+		}, null, 2)
+		clipboard.copy(json)
+	}
+
+	const copyEventXml = () => {
+		if (!selectedEvent) return
+		clipboard.copy(selectedEvent.xml)
 	}
 
 	return (
@@ -44,10 +83,11 @@ export function EventViewer({records}: Properties) {
 						{records.map(record => (
 							<Paper
 								key={record.recordId}
-								p="sm"
+								p="md"
 								style={{
 									cursor: 'pointer',
 									borderBottom: '1px solid var(--mantine-color-dark-4)',
+									borderLeft: `4px solid var(--mantine-color-${LEVEL_COLORS[record.level] || 'gray'}-6)`,
 									backgroundColor:
 										selectedEvent?.recordId === record.recordId
 											? 'var(--mantine-color-dark-6)'
@@ -66,8 +106,8 @@ export function EventViewer({records}: Properties) {
 								}}
 								onClick={() => setSelectedEvent(record)}
 							>
-								<Group gap="sm" wrap="nowrap">
-									<Box style={{flexShrink: 0}}>
+								<Group gap="sm" wrap="nowrap" align="flex-start">
+									<Box style={{flexShrink: 0, marginTop: '2px'}}>
 										{LEVEL_ICONS[record.level] || LEVEL_ICONS[4]}
 									</Box>
 									<Stack gap={4} style={{flex: 1, minWidth: 0}}>
@@ -82,8 +122,20 @@ export function EventViewer({records}: Properties) {
 										<Text size="xs" c="dimmed" truncate>
 											{record.provider}
 										</Text>
-										<Text size="xs" c="dimmed" style={{fontFamily: 'monospace'}}>
-											{record.timestamp.split('T')[0]} {record.timestamp.split('T')[1]?.substring(0, 8)}
+										{record.eventData && (
+											<Text
+												size="xs"
+												lineClamp={2}
+												style={{
+													color: 'var(--mantine-color-dimmed)',
+													lineHeight: 1.4
+												}}
+											>
+												{record.eventData}
+											</Text>
+										)}
+										<Text size="xs" c="dimmed">
+											{formatRelativeTime(record.timestamp)}
 										</Text>
 									</Stack>
 								</Group>
@@ -98,19 +150,40 @@ export function EventViewer({records}: Properties) {
 				{selectedEvent ? (
 					<>
 						<Box p="md" style={{borderBottom: '1px solid var(--mantine-color-dark-4)'}}>
-							<Group gap="sm">
-								{LEVEL_ICONS[selectedEvent.level] || LEVEL_ICONS[4]}
-								<div>
-									<Group gap="xs">
-										<Title order={4}>Event {selectedEvent.eventId}</Title>
-										<Badge color={LEVEL_COLORS[selectedEvent.level] ?? 'gray'}>
-											{selectedEvent.levelText}
-										</Badge>
-									</Group>
-									<Text size="sm" c="dimmed">
-										{selectedEvent.provider}
-									</Text>
-								</div>
+							<Group justify="space-between">
+								<Group gap="sm">
+									{LEVEL_ICONS[selectedEvent.level] || LEVEL_ICONS[4]}
+									<div>
+										<Group gap="xs">
+											<Title order={4}>Event {selectedEvent.eventId}</Title>
+											<Badge color={LEVEL_COLORS[selectedEvent.level] ?? 'gray'}>
+												{selectedEvent.levelText}
+											</Badge>
+										</Group>
+										<Text size="sm" c="dimmed">
+											{selectedEvent.provider}
+										</Text>
+									</div>
+								</Group>
+								<Group gap="xs">
+									<Tooltip label={clipboard.copied ? 'Copied!' : 'Copy as JSON'}>
+										<ActionIcon
+											variant="default"
+											onClick={copyEventAsJson}
+											color={clipboard.copied ? 'green' : undefined}
+										>
+											{clipboard.copied ? <IconCheck size={18} /> : <IconCopy size={18} />}
+										</ActionIcon>
+									</Tooltip>
+									<Button
+										size="xs"
+										variant="default"
+										leftSection={<IconCopy size={14} />}
+										onClick={copyEventXml}
+									>
+										Copy XML
+									</Button>
+								</Group>
 							</Group>
 						</Box>
 
@@ -125,6 +198,22 @@ export function EventViewer({records}: Properties) {
 								<Tabs.Panel value="general" style={{height: '100%'}}>
 									<ScrollArea style={{height: '100%'}} p="md">
 										<Stack gap="md">
+											{selectedEvent.eventData && (
+												<>
+													<Box>
+														<Text size="sm" fw={500} mb="xs">
+															Description:
+														</Text>
+														<Paper withBorder p="sm" style={{backgroundColor: 'var(--mantine-color-dark-6)'}}>
+															<Text size="sm" style={{whiteSpace: 'pre-wrap'}}>
+																{selectedEvent.eventData}
+															</Text>
+														</Paper>
+													</Box>
+													<Divider />
+												</>
+											)}
+
 											<DetailRow label="Event ID" value={selectedEvent.eventId} />
 											<DetailRow label="Level" value={selectedEvent.levelText} />
 											<DetailRow label="Time Created" value={selectedEvent.timestamp} mono />
