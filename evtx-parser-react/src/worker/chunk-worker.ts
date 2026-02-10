@@ -6,6 +6,7 @@ import {
 } from '@/parser/evtx'
 import {formatChunkHeaderComment, formatRecordComment} from '@/parser/format'
 import {hex32} from '@/parser/helpers'
+import {parseEventXml} from '@/parser/xml-helper'
 import type {ChunkHeader, EvtxRecord, ParsedEventRecord, TemplateStats} from '@/parser/types'
 import type {
 	ChunkParseError,
@@ -22,64 +23,11 @@ const LEVEL_NAMES: Record<number, string> = {
 }
 
 function extractEventFields(xmlString: string): Omit<ParsedEventRecord, 'recordId' | 'timestamp' | 'xml' | 'chunkIndex'> {
-	const parser = new DOMParser()
-	const doc = parser.parseFromString(xmlString, 'text/xml')
-
-	const getTextContent = (selector: string): string => {
-		const el = doc.querySelector(selector)
-		return el?.textContent?.trim() || ''
-	}
-
-	const getAttribute = (selector: string, attr: string): string => {
-		const el = doc.querySelector(selector)
-		return el?.getAttribute(attr)?.trim() || ''
-	}
-
-	const eventId = getTextContent('EventID')
-	const level = Number.parseInt(getTextContent('Level'), 10) || 0
-	const provider = getAttribute('Provider', 'Name')
-	const computer = getTextContent('Computer')
-	const channel = getTextContent('Channel')
-	const task = getTextContent('Task')
-	const opcode = getTextContent('Opcode')
-	const keywords = getTextContent('Keywords')
-	const version = getTextContent('Version')
-	const processId = getAttribute('Execution', 'ProcessID')
-	const threadId = getAttribute('Execution', 'ThreadID')
-	const securityUserId = getAttribute('Security', 'UserID')
-	const activityId = getAttribute('Correlation', 'ActivityID')
-	const relatedActivityId = getAttribute('Correlation', 'RelatedActivityID')
-
-	// Extract EventData as formatted key-value pairs
-	const eventDataElements = doc.querySelectorAll('EventData > Data')
-	const eventDataPairs: string[] = []
-	for (const el of eventDataElements) {
-		const name = el.getAttribute('Name')
-		const value = el.textContent?.trim() || ''
-		if (value) {
-			// If has Name attribute, format as "Name: Value", otherwise just the value
-			eventDataPairs.push(name ? `${name}: ${value}` : value)
-		}
-	}
-	const eventData = eventDataPairs.join('\n')
+	const parsed = parseEventXml(xmlString)
 
 	return {
-		eventId,
-		level,
-		levelText: LEVEL_NAMES[level] || `Level ${level}`,
-		provider,
-		computer,
-		channel,
-		task,
-		opcode,
-		keywords,
-		version,
-		processId,
-		threadId,
-		securityUserId,
-		activityId,
-		relatedActivityId,
-		eventData
+		...parsed,
+		levelText: LEVEL_NAMES[parsed.level] || `Level ${parsed.level}`
 	}
 }
 
