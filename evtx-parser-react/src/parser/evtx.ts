@@ -1,15 +1,86 @@
 import {parseBinXmlDocument} from './binxml'
 import {HEX} from './constants'
-import {formatChunkHeaderComment, formatRecordComment} from './format'
-import {formatGuid, hex32} from './helpers'
+// import {formatChunkHeaderComment, formatRecordComment} from './format'
+import {formatGuid} from './helpers'
 import type {
 	ChunkHeader,
 	EvtxParseResult,
 	EvtxRecord,
 	FileHeader,
 	ParsedChunk,
+	ParsedEventRecord,
 	TemplateStats
 } from './types'
+
+const LEVEL_NAMES: Record<number, string> = {
+	1: 'Critical',
+	2: 'Error',
+	3: 'Warning',
+	4: 'Information',
+	5: 'Verbose'
+}
+
+function extractEventFields(xmlString: string): Omit<ParsedEventRecord, 'recordId' | 'timestamp' | 'xml' | 'chunkIndex'> {
+	const parser = new DOMParser()
+	const doc = parser.parseFromString(xmlString, 'text/xml')
+
+	const getTextContent = (selector: string): string => {
+		const el = doc.querySelector(selector)
+		return el?.textContent?.trim() || ''
+	}
+
+	const getAttribute = (selector: string, attr: string): string => {
+		const el = doc.querySelector(selector)
+		return el?.getAttribute(attr)?.trim() || ''
+	}
+
+	const eventId = getTextContent('EventID')
+	const level = Number.parseInt(getTextContent('Level'), 10) || 0
+	const provider = getAttribute('Provider', 'Name')
+	const computer = getTextContent('Computer')
+	const channel = getTextContent('Channel')
+	const task = getTextContent('Task')
+	const opcode = getTextContent('Opcode')
+	const keywords = getTextContent('Keywords')
+	const version = getTextContent('Version')
+	const processId = getAttribute('Execution', 'ProcessID')
+	const threadId = getAttribute('Execution', 'ThreadID')
+	const securityUserId = getAttribute('Security', 'UserID')
+	const activityId = getAttribute('Correlation', 'ActivityID')
+	const relatedActivityId = getAttribute('Correlation', 'RelatedActivityID')
+
+	// Extract EventData as formatted key-value pairs
+	const eventDataElements = doc.querySelectorAll('EventData > Data')
+	const eventDataPairs: string[] = []
+	for (const el of eventDataElements) {
+		const name = el.getAttribute('Name')
+		const value = el.textContent?.trim() || ''
+		if (value) {
+			// If has Name attribute, format as "Name: Value", otherwise just the value
+			eventDataPairs.push(name ? `${name}: ${value}` : value)
+		}
+	}
+	const eventData = eventDataPairs.join('\n')
+
+	return {
+		eventId,
+		level,
+		levelText: LEVEL_NAMES[level] || `Level ${level}`,
+		provider,
+		computer,
+		channel,
+		task,
+		opcode,
+		keywords,
+		version,
+		processId,
+		threadId,
+		securityUserId,
+		activityId,
+		relatedActivityId,
+		eventData
+	}
+}
 
 function filetimeToIso(dv: DataView, offset: number): string {
 	const ft = dv.getBigUint64(offset, true)
@@ -262,6 +333,7 @@ export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
 	let totalRecords = 0
 	const allWarnings: string[] = []
 	const recordOutputs: string[] = []
+	const parsedRecords: ParsedEventRecord[] = []
 
 	for (let ci = 0; ci < chunkOffsets.length; ci++) {
 		const chunkOffset = chunkOffsets[ci]!
@@ -273,7 +345,7 @@ export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
 			allWarnings.push(w)
 		}
 
-		const chunkHeaderText = `${formatChunkHeaderComment(ci, chunk.header)}\n\n`
+		// const chunkHeaderText = `${formatChunkHeaderComment(ci, chunk.header)}\n\n`
 
 		const chunkDv = new DataView(buffer, chunkOffset, 65_536)
 
@@ -282,7 +354,7 @@ export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
 		for (let ri = 0; ri < chunk.records.length; ri++) {
 			const r = chunk.records[ri]!
 			tplStats.currentRecordId = r.recordId
-			const refsBefore = tplStats.referenceCount
+			// const refsBefore = tplStats.referenceCount
 
 			const binxmlChunkBase = r.chunkOffset + 24
 
@@ -304,20 +376,30 @@ export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
 				})
 			}
 
-			let tplComment = ''
-			const refsForRecord = tplStats.references.slice(refsBefore)
-			if (refsForRecord.length > 0) {
-				const ref = refsForRecord[0]!
-				const def = tplStats.defsByOffset[ref.defDataOffset]
-				tplComment = `<!-- template: guid=${ref.guid || '(back-ref)'} defOffset=${hex32(ref.defDataOffset)} dataSize=${ref.dataSize}${ref.isInline ? ' (INLINE definition)' : ` (back-reference${def ? `, defined in record ${def.firstSeenRecord}` : ''})`} -->\n`
-			}
+			// let tplComment = ''
+			// const refsForRecord = tplStats.references.slice(refsBefore)
+			// if (refsForRecord.length > 0) {
+			// 	const ref = refsForRecord[0]!
+			// 	const def = tplStats.defsByOffset[ref.defDataOffset]
+			// 	tplComment = `<!-- template: guid=${ref.guid || '(back-ref)'} defOffset=${hex32(ref.defDataOffset)} dataSize=${ref.dataSize}${ref.isInline ? ' (INLINE definition)' : ` (back-reference${def ? `, defined in record ${def.firstSeenRecord}` : ''})`} -->\n`
+			// }
 
 			let recOut = ''
-			if (ri === 0) recOut += chunkHeaderText
-			recOut += `${formatRecordComment(r, ci)}\n`
-			if (tplComment) recOut += tplComment
+			// if (ri === 0) recOut += chunkHeaderText
+			// recOut += `${formatRecordComment(r, ci)}\n`
+			// if (tplComment) recOut += tplComment
 			recOut += parsedXml
 			recordOutputs.push(recOut)
+
+			// Store structured record data for table view
+			const extracted = extractEventFields(parsedXml)
+			parsedRecords.push({
+				recordId: r.recordId,
+				timestamp: r.timestamp,
+				xml: parsedXml,
+				chunkIndex: ci,
+				...extracted
+			})
 		}
 
 		totalRecords += chunk.records.length
@@ -326,63 +408,64 @@ export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
 	// Build summary
 	const summary: string[] = []
 	summary.push('<?xml version="1.0" encoding="utf-8"?>')
-	summary.push('<!-- ═══════════════════════════════════════════')
-	summary.push('   EVTX Parse Summary')
-	const fileFlags: string[] = []
-	if (fileHeader.isDirty) fileFlags.push('DIRTY')
-	if (fileHeader.isFull) fileFlags.push('FULL')
-	summary.push(
-		`   File flags:          ${hex32(fileHeader.flags)}${fileFlags.length > 0 ? ` (${fileFlags.join(', ')})` : ' (clean)'}`
-	)
-	summary.push(`   Chunks:              ${chunkOffsets.length}`)
-	summary.push(`   Total records:       ${totalRecords}`)
-	summary.push(`   Template definitions: ${tplStats.definitionCount}`)
-	summary.push(`   Template references:  ${tplStats.referenceCount}`)
-	summary.push(`   Missing templates:    ${tplStats.missingCount}`)
-	summary.push(`   Parse errors:         ${tplStats.parseErrors.length}`)
+	// summary.push('<!-- ═══════════════════════════════════════════')
+	// summary.push('   EVTX Parse Summary')
+	// const fileFlags: string[] = []
+	// if (fileHeader.isDirty) fileFlags.push('DIRTY')
+	// if (fileHeader.isFull) fileFlags.push('FULL')
+	// summary.push(
+	// 	`   File flags:          ${hex32(fileHeader.flags)}${fileFlags.length > 0 ? ` (${fileFlags.join(', ')})` : ' (clean)'}`
+	// )
+	// summary.push(`   Chunks:              ${chunkOffsets.length}`)
+	// summary.push(`   Total records:       ${totalRecords}`)
+	// summary.push(`   Template definitions: ${tplStats.definitionCount}`)
+	// summary.push(`   Template references:  ${tplStats.referenceCount}`)
+	// summary.push(`   Missing templates:    ${tplStats.missingCount}`)
+	// summary.push(`   Parse errors:         ${tplStats.parseErrors.length}`)
 
-	if (tplStats.definitionCount > 0) {
-		summary.push('')
-		summary.push('   Defined templates:')
-		const guids = Object.keys(tplStats.definitions)
-		for (const guid of guids) {
-			const d = tplStats.definitions[guid]
-			if (!d) continue
-			let refCount = 0
-			for (const ref of tplStats.references) {
-				if (ref.guid === guid) refCount++
-			}
-			summary.push(
-				`     ${d.guid}  offset=${hex32(d.defDataOffset)}  size=${d.dataSize}  refs=${refCount}  first=record ${d.firstSeenRecord}`
-			)
-		}
-	}
+	// if (tplStats.definitionCount > 0) {
+	// 	summary.push('')
+	// 	summary.push('   Defined templates:')
+	// 	const guids = Object.keys(tplStats.definitions)
+	// 	for (const guid of guids) {
+	// 		const d = tplStats.definitions[guid]
+	// 		if (!d) continue
+	// 		let refCount = 0
+	// 		for (const ref of tplStats.references) {
+	// 			if (ref.guid === guid) refCount++
+	// 		}
+	// 		summary.push(
+	// 			`     ${d.guid}  offset=${hex32(d.defDataOffset)}  size=${d.dataSize}  refs=${refCount}  first=record ${d.firstSeenRecord}`
+	// 		)
+	// 	}
+	// }
 
-	if (tplStats.missingCount > 0) {
-		summary.push('')
-		summary.push('   Missing template references:')
-		for (const m of tplStats.missingRefs) {
-			summary.push(
-				`     record ${m.recordId}: guid=${m.guid}  defOffset=${hex32(m.defDataOffset)}`
-			)
-		}
-	}
+	// if (tplStats.missingCount > 0) {
+	// 	summary.push('')
+	// 	summary.push('   Missing template references:')
+	// 	for (const m of tplStats.missingRefs) {
+	// 		summary.push(
+	// 			`     record ${m.recordId}: guid=${m.guid}  defOffset=${hex32(m.defDataOffset)}`
+	// 		)
+	// 	}
+	// }
 
-	if (tplStats.parseErrors.length > 0) {
-		summary.push('')
-		summary.push('   Parse errors:')
-		for (const e of tplStats.parseErrors) {
-			summary.push(`     record ${e.recordId}: ${e.error}`)
-		}
-	}
+	// if (tplStats.parseErrors.length > 0) {
+	// 	summary.push('')
+	// 	summary.push('   Parse errors:')
+	// 	for (const e of tplStats.parseErrors) {
+	// 		summary.push(`     record ${e.recordId}: ${e.error}`)
+	// 	}
+	// }
 
-	summary.push('   ═══════════════════════════════════════════ -->')
+	// summary.push('   ═══════════════════════════════════════════ -->')
 	summary.push('<Events>\n')
 
 	const summaryText = summary.join('\n')
 	return {
 		summary: summaryText,
 		recordOutputs,
+		records: parsedRecords,
 		xml: `${summaryText}${recordOutputs.join('\n\n')}\n\n</Events>`,
 		totalRecords,
 		numChunks: chunkOffsets.length,

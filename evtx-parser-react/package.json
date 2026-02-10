@@ -24,6 +24,7 @@
 		"@mantine/hooks": "^8.3.14",
 		"@mantine/modals": "^8.3.14",
 		"@mantine/spotlight": "^8.3.14",
+		"@tabler/icons-react": "^3.36.1",
 		"react": "19.2.0",
 		"react-dom": "19.2.0",
 		"react-error-boundary": "6.0.0"

@@ -1,14 +1,16 @@
-import {Container, Stack, Text, Title} from '@mantine/core'
+import {Button, Container, Group, Stack, Text, Title} from '@mantine/core'
 import {Dropzone} from '@mantine/dropzone'
-import {useMemo} from 'react'
+import {IconLayoutList, IconTable} from '@tabler/icons-react'
+import {useMemo, useState} from 'react'
 import {useEvtxParser} from '@/hooks/useEvtxParser'
 import {usePagination} from '@/hooks/usePagination'
 import {ControlBar} from './ControlBar'
+import {EventViewer} from './EventViewer'
+import {EventsTable} from './EventsTable'
 import {PaginationBar} from './PaginationBar'
 import {ProgressBar} from './ProgressBar'
 import {StatusMessage} from './StatusMessage'
 import {WarningsPanel} from './WarningsPanel'
-import {XmlOutput} from './XmlOutput'
 
 type StatusType = 'error' | 'info' | 'success'
 
@@ -89,24 +91,25 @@ function DoneControls({
 	)
 }
 
+type ViewMode = 'viewer' | 'table'
+
 export function EvtxParser() {
 	const {state, parseFile} = useEvtxParser()
+	const [viewMode, setViewMode] = useState<ViewMode>('viewer')
 
 	const totalRecords =
-		state.status === 'done' ? state.result.recordOutputs.length : 0
+		state.status === 'done' ? state.result.records.length : 0
 	const pagination = usePagination(totalRecords)
 
-	const displayXml = useMemo(() => {
-		if (state.status !== 'done') return ''
-		const {summary, recordOutputs} = state.result
-		const pageRecords = recordOutputs.slice(pagination.start, pagination.end)
-		return `${summary}${pageRecords.join('\n\n')}\n\n</Events>`
+	const displayRecords = useMemo(() => {
+		if (state.status !== 'done') return []
+		return state.result.records.slice(pagination.start, pagination.end)
 	}, [state, pagination.start, pagination.end])
 
 	const isWorking = state.status === 'reading' || state.status === 'parsing'
 
 	return (
-		<Container size="md" style={{minHeight: '100vh', padding: '2rem'}}>
+		<Container size="xl" style={{minHeight: '100vh', padding: '2rem'}}>
 			<Stack gap="md" align="center">
 				<Title order={1}>EVTX → Raw Byte Dump</Title>
 
@@ -138,7 +141,7 @@ export function EvtxParser() {
 					</div>
 				</Dropzone>
 
-				<Stack gap="md" style={{width: '100%', maxWidth: '700px'}}>
+				<Stack gap="md" style={{width: '100%'}}>
 					<ProgressBar progress={getProgress(state.status)} />
 					<StatusMessage
 						message={getStatusMessage(state)}
@@ -146,14 +149,43 @@ export function EvtxParser() {
 					/>
 
 					{state.status === 'done' && (
-						<DoneControls
-							pagination={pagination}
-							state={state}
-							totalRecords={totalRecords}
-						/>
+						<>
+							<Group justify="space-between" style={{width: '100%'}}>
+								<Group>
+									<Button
+										variant={viewMode === 'viewer' ? 'filled' : 'default'}
+										leftSection={<IconLayoutList size={18} />}
+										onClick={() => setViewMode('viewer')}
+										size="sm"
+									>
+										Viewer
+									</Button>
+									<Button
+										variant={viewMode === 'table' ? 'filled' : 'default'}
+										leftSection={<IconTable size={18} />}
+										onClick={() => setViewMode('table')}
+										size="sm"
+									>
+										Table
+									</Button>
+								</Group>
+							</Group>
+
+							<DoneControls
+								pagination={pagination}
+								state={state}
+								totalRecords={totalRecords}
+							/>
+						</>
 					)}
 
-					<XmlOutput value={displayXml} />
+					{state.status === 'done' && viewMode === 'viewer' && (
+						<EventViewer records={displayRecords} />
+					)}
+
+					{state.status === 'done' && viewMode === 'table' && (
+						<EventsTable records={displayRecords} />
+					)}
 				</Stack>
 			</Stack>
 		</Container>

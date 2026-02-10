@@ -15,6 +15,7 @@ export type {
 	EvtxRecord,
 	FileHeader,
 	ParsedChunk,
+	ParsedEventRecord,
 	TemplateDefinition,
 	TemplateMissingRef,
 	TemplateParseError,

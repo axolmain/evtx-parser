@@ -1,5 +1,5 @@
 import {hex32} from '@/parser/helpers'
-import type {EvtxParseResult, FileHeader, TemplateStats} from '@/parser/types'
+import type {EvtxParseResult, FileHeader, ParsedEventRecord, TemplateStats} from '@/parser/types'
 import type {ChunkParseSuccess} from './protocol'
 
 export function mergeChunkResults(
@@ -9,6 +9,7 @@ export function mergeChunkResults(
 ): EvtxParseResult {
 	// Merge all record outputs, warnings, and stats in chunk order
 	const recordOutputs: string[] = []
+	const parsedRecords: ParsedEventRecord[] = []
 	const allWarnings: string[] = []
 	let totalRecords = 0
 
@@ -26,6 +27,7 @@ export function mergeChunkResults(
 
 	for (const r of results) {
 		for (const o of r.recordOutputs) recordOutputs.push(o)
+		for (const rec of r.records) parsedRecords.push(rec)
 		for (const w of r.warnings) allWarnings.push(w)
 		totalRecords += r.recordCount
 
@@ -104,6 +106,7 @@ export function mergeChunkResults(
 	return {
 		summary: summaryText,
 		recordOutputs,
+		records: parsedRecords,
 		xml: `${summaryText}${recordOutputs.join('\n\n')}\n\n</Events>`,
 		totalRecords,
 		numChunks,

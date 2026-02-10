@@ -1,4 +1,5 @@
 import type {
+	ParsedEventRecord,
 	TemplateDefinition,
 	TemplateMissingRef,
 	TemplateParseError,
@@ -32,6 +33,7 @@ export interface ChunkParseSuccess {
 	readonly partialStats: PartialStats
 	readonly recordCount: number
 	readonly recordOutputs: string[]
+	readonly records: ParsedEventRecord[]
 	readonly type: 'chunk-success'
 	readonly warnings: string[]
 }

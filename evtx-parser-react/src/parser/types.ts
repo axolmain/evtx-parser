@@ -91,9 +91,33 @@ export interface ParsePosition {
 	offset: number
 }
 
+export interface ParsedEventRecord {
+	readonly recordId: number
+	readonly timestamp: string
+	readonly xml: string
+	readonly chunkIndex: number
+	readonly eventId: string
+	readonly level: number
+	readonly levelText: string
+	readonly provider: string
+	readonly computer: string
+	readonly channel: string
+	readonly task: string
+	readonly opcode: string
+	readonly keywords: string
+	readonly version: string
+	readonly processId: string
+	readonly threadId: string
+	readonly securityUserId: string
+	readonly activityId: string
+	readonly relatedActivityId: string
+	readonly eventData: string
+}
+
 export interface EvtxParseResult {
 	readonly numChunks: number
 	readonly recordOutputs: string[]
+	readonly records: ParsedEventRecord[]
 	readonly summary: string
 	readonly totalRecords: number
 	readonly tplStats: TemplateStats
