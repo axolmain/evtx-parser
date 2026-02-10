@@ -88,8 +88,12 @@ function hex32(v) {
 function parseFileHeader(buffer, dv) {
   var sig = new TextDecoder().decode(new Uint8Array(buffer, 0, 8));
   if (!sig.startsWith('ElfFile')) throw new Error('Not a valid EVTX file');
+  var flags = dv.getUint32(120, true);
   return {
-    headerBlockSize: dv.getUint16(40, true)
+    headerBlockSize: dv.getUint16(40, true),
+    flags: flags,
+    isDirty: !!(flags & 0x01),
+    isFull:  !!(flags & 0x02)
   };
 }
 
@@ -136,7 +140,9 @@ function formatChunkHeaderComment(ci, h) {
   lines.push('  freeSpaceOff:  ' + hex32(h.freeSpaceOffset));
   lines.push('  evtRecCRC32:   ' + hex32(h.eventRecordsChecksum));
   lines.push('  hdrCRC32:      ' + hex32(h.headerChecksum));
-  lines.push('  flags:         ' + hex32(h.flags));
+  var flagLabels = [];
+  if (h.flags & 0x01) flagLabels.push('CORRUPTED');
+  lines.push('  flags:         ' + hex32(h.flags) + (flagLabels.length ? ' (' + flagLabels.join(', ') + ')' : ''));
 
   var csUsed = [];
   for (var i = 0; i < 64; i++) {
@@ -881,6 +887,11 @@ function formatRecordComment(r, ci) {
 function validateChunk(ci, header, records) {
   var warnings = [];
 
+  // Check chunk corrupted flag
+  if (header.flags & 0x01) {
+    warnings.push('Chunk ' + ci + ': marked as CORRUPTED (flag 0x01)');
+  }
+
   // Check record count vs header claims
   var expectedCount = header.lastEventRecordId - header.firstEventRecordId + 1;
   if (records.length !== expectedCount) {
@@ -1038,6 +1049,10 @@ function parseEvtx(buffer) {
   summary.push('<?xml version="1.0" encoding="utf-8"?>');
   summary.push('<!-- ═══════════════════════════════════════════');
   summary.push('   EVTX Parse Summary');
+  var fileFlags = [];
+  if (fileHeader.isDirty) fileFlags.push('DIRTY');
+  if (fileHeader.isFull)  fileFlags.push('FULL');
+  summary.push('   File flags:          ' + hex32(fileHeader.flags) + (fileFlags.length ? ' (' + fileFlags.join(', ') + ')' : ' (clean)'));
   summary.push('   Chunks:              ' + chunkOffsets.length);
   summary.push('   Total records:       ' + totalRecords);
   summary.push('   Template definitions: ' + tplStats.definitionCount);
