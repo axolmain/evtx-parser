@@ -1,8 +1,9 @@
+import {Container, Stack, Text, Title} from '@mantine/core'
+import {Dropzone} from '@mantine/dropzone'
 import {useMemo} from 'react'
 import {useEvtxParser} from '@/hooks/useEvtxParser'
 import {usePagination} from '@/hooks/usePagination'
 import {ControlBar} from './ControlBar'
-import {DropZone} from './DropZone'
 import {PaginationBar} from './PaginationBar'
 import {ProgressBar} from './ProgressBar'
 import {StatusMessage} from './StatusMessage'
@@ -105,28 +106,56 @@ export function EvtxParser() {
 	const isWorking = state.status === 'reading' || state.status === 'parsing'
 
 	return (
-		<div className='flex min-h-screen flex-col items-center p-8'>
-			<h1 className='mb-6 text-2xl text-[#c0c0c0]'>EVTX → Raw Byte Dump</h1>
+		<Container size="md" style={{minHeight: '100vh', padding: '2rem'}}>
+			<Stack gap="md" align="center">
+				<Title order={1}>EVTX → Raw Byte Dump</Title>
 
-			<DropZone disabled={isWorking} onFile={parseFile} />
+				<Dropzone
+					onDrop={(files) => files[0] && parseFile(files[0])}
+					accept={['.evtx']}
+					disabled={isWorking}
+					style={{width: '100%', maxWidth: '700px'}}
+				>
+					<div style={{textAlign: 'center', padding: '3rem 2rem'}}>
+						<Dropzone.Accept>
+							<div style={{fontSize: '2.5rem', marginBottom: '0.5rem'}}>📄</div>
+							<Text size="md" c="teal">
+								Drop file here
+							</Text>
+						</Dropzone.Accept>
+						<Dropzone.Reject>
+							<div style={{fontSize: '2.5rem', marginBottom: '0.5rem'}}>❌</div>
+							<Text size="md" c="red">
+								Only .evtx files allowed
+							</Text>
+						</Dropzone.Reject>
+						<Dropzone.Idle>
+							<div style={{fontSize: '2.5rem', marginBottom: '0.5rem'}}>📄</div>
+							<Text size="md" c="dimmed">
+								Drop an .evtx file here or click to browse
+							</Text>
+						</Dropzone.Idle>
+					</div>
+				</Dropzone>
 
-			<div className='mt-6 w-full max-w-[700px] space-y-4'>
-				<ProgressBar progress={getProgress(state.status)} />
-				<StatusMessage
-					message={getStatusMessage(state)}
-					type={getStatusType(state)}
-				/>
-
-				{state.status === 'done' && (
-					<DoneControls
-						pagination={pagination}
-						state={state}
-						totalRecords={totalRecords}
+				<Stack gap="md" style={{width: '100%', maxWidth: '700px'}}>
+					<ProgressBar progress={getProgress(state.status)} />
+					<StatusMessage
+						message={getStatusMessage(state)}
+						type={getStatusType(state)}
 					/>
-				)}
 
-				<XmlOutput value={displayXml} />
-			</div>
-		</div>
+					{state.status === 'done' && (
+						<DoneControls
+							pagination={pagination}
+							state={state}
+							totalRecords={totalRecords}
+						/>
+					)}
+
+					<XmlOutput value={displayXml} />
+				</Stack>
+			</Stack>
+		</Container>
 	)
 }

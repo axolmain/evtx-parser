@@ -1,3 +1,4 @@
+import {Text} from '@mantine/core'
 import type {TemplateStats} from '@/parser'
 
 interface Properties {
@@ -25,8 +26,8 @@ export function StatsDisplay({
 	}
 
 	return (
-		<div className='ml-auto flex items-center gap-4 text-[#666] text-[0.8rem]'>
+		<Text size="xs" c="dimmed" style={{marginLeft: 'auto'}}>
 			{text}
-		</div>
+		</Text>
 	)
 }

@@ -1,3 +1,5 @@
+import {Button, Group, NativeSelect, Text} from '@mantine/core'
+
 interface Properties {
 	currentPage: number
 	end: number
@@ -28,41 +30,35 @@ export function PaginationBar({
 	onPageSizeChange
 }: Properties) {
 	return (
-		<div className='flex w-full max-w-[700px] flex-wrap items-center gap-3'>
-			<button
-				className='cursor-pointer rounded-md border border-[#333] bg-[#1a1a24] px-5 py-2 text-[#ccc] text-[0.85rem] transition-colors hover:bg-[#252530] disabled:cursor-default disabled:opacity-40'
+		<Group gap="sm" style={{width: '100%', maxWidth: '700px'}}>
+			<Button
+				variant="default"
+				size="sm"
 				disabled={!hasPrev}
 				onClick={onPrev}
-				type='button'
 			>
 				← Prev
-			</button>
-			<span className='flex items-center text-[#888] text-[0.85rem]'>
+			</Button>
+			<Text size="sm" c="dimmed">
 				Page {currentPage + 1} of {totalPages} ({start + 1}–{end} of{' '}
 				{totalItems})
-			</span>
-			<button
-				className='cursor-pointer rounded-md border border-[#333] bg-[#1a1a24] px-5 py-2 text-[#ccc] text-[0.85rem] transition-colors hover:bg-[#252530] disabled:cursor-default disabled:opacity-40'
+			</Text>
+			<Button
+				variant="default"
+				size="sm"
 				disabled={!hasNext}
 				onClick={onNext}
-				type='button'
 			>
 				Next →
-			</button>
-			<label className='ml-auto text-[#666] text-[0.85rem]'>
-				Per page:{' '}
-				<select
-					className='rounded border border-[#333] bg-[#1a1a24] px-1.5 py-0.5 text-[#ccc] text-[0.85rem]'
-					onChange={e => onPageSizeChange(Number(e.target.value))}
-					value={pageSize}
-				>
-					{pageSizes.map(s => (
-						<option key={s} value={s}>
-							{s}
-						</option>
-					))}
-				</select>
-			</label>
-		</div>
+			</Button>
+			<NativeSelect
+				label="Per page"
+				data={pageSizes.map(String)}
+				value={String(pageSize)}
+				onChange={e => onPageSizeChange(Number(e.currentTarget.value))}
+				size="sm"
+				style={{marginLeft: 'auto', width: 'auto'}}
+			/>
+		</Group>
 	)
 }

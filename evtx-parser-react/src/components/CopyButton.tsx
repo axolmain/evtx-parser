@@ -1,4 +1,5 @@
-import {useCallback, useState} from 'react'
+import {Button} from '@mantine/core'
+import {useClipboard} from '@mantine/hooks'
 
 interface Properties {
 	disabled?: boolean
@@ -6,22 +7,16 @@ interface Properties {
 }
 
 export function CopyButton({text, disabled}: Properties) {
-	const [copied, setCopied] = useState(false)
-
-	const handleClick = useCallback(async () => {
-		await navigator.clipboard.writeText(text)
-		setCopied(true)
-		setTimeout(() => setCopied(false), 1500)
-	}, [text])
+	const clipboard = useClipboard({timeout: 1500})
 
 	return (
-		<button
-			className='cursor-pointer rounded-md border border-[#333] bg-[#1a1a24] px-5 py-2 text-[#ccc] text-[0.85rem] transition-colors hover:bg-[#252530] disabled:cursor-default disabled:opacity-40'
-			disabled={disabled}
-			onClick={handleClick}
-			type='button'
+		<Button
+			variant="default"
+			size="sm"
+			disabled={disabled ?? false}
+			onClick={() => clipboard.copy(text)}
 		>
-			{copied ? 'Copied!' : 'Copy XML'}
-		</button>
+			{clipboard.copied ? 'Copied!' : 'Copy XML'}
+		</Button>
 	)
 }

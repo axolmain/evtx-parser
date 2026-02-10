@@ -1,3 +1,4 @@
+import {Group} from '@mantine/core'
 import type {TemplateStats} from '@/parser'
 import {CopyButton} from './CopyButton'
 import {DownloadButton} from './DownloadButton'
@@ -25,7 +26,7 @@ export function ControlBar({
 	tplStats
 }: Properties) {
 	return (
-		<div className='flex w-full max-w-[700px] flex-wrap gap-3'>
+		<Group gap="sm" style={{width: '100%', maxWidth: '700px'}}>
 			<CopyButton disabled={disabled} text={xml} />
 			<DownloadButton disabled={disabled} fileName={fileName} text={xml} />
 			<StatsDisplay
@@ -35,6 +36,6 @@ export function ControlBar({
 				totalRecords={totalRecords}
 				tplStats={tplStats}
 			/>
-		</div>
+		</Group>
 	)
 }
