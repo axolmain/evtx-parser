@@ -9,6 +9,7 @@ import {
 } from 'mantine-react-table'
 import {useEffect, useMemo, useState} from 'react'
 import type {ParsedEventRecord} from '@/parser'
+import './EventsTable.css'
 
 interface Properties {
 	records: ParsedEventRecord[]
@@ -33,7 +34,9 @@ const DEFAULT_HIDDEN: MRT_VisibilityState = {
 	threadId: false,
 	securityUserId: false,
 	activityId: false,
-	relatedActivityId: false
+	relatedActivityId: false,
+	channel: false, // Hide channel by default - less critical
+	eventData: false // Hide event data - better viewed in detail panel
 }
 
 export function EventsTable({records, selectedRecordId}: Properties) {
@@ -69,61 +72,136 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 
 	const columns = useMemo<MRT_ColumnDef<ParsedEventRecord>[]>(
 		() => [
-			{accessorKey: 'recordId', header: 'Record ID', size: 100},
+			{
+				accessorKey: 'recordId',
+				header: 'Record ID',
+				size: 90,
+				minSize: 90,
+				mantineTableBodyCellProps: {fz: 'sm', c: 'dimmed'}
+			},
 			{
 				accessorKey: 'timestamp',
-				header: 'Time Created',
-				size: 200,
-				mantineTableBodyCellProps: {ff: 'monospace', fz: '0.8rem'}
+				header: 'Time',
+				size: 160,
+				minSize: 120,
+				mantineTableBodyCellProps: {ff: 'monospace', fz: 'sm'}
 			},
-			{accessorKey: 'provider', header: 'Provider', size: 220},
-			{accessorKey: 'eventId', header: 'Event ID', size: 100},
 			{
 				accessorKey: 'level',
 				header: 'Level',
-				size: 110,
+				size: 100,
+				minSize: 85,
 				Cell: ({row}) => (
-					<Badge color={LEVEL_COLORS[row.original.level] ?? 'gray'} size='sm'>
+					<Badge
+						color={LEVEL_COLORS[row.original.level] ?? 'gray'}
+						size='sm'
+						variant='light'
+					>
 						{row.original.levelText}
 					</Badge>
 				)
 			},
-			{accessorKey: 'task', header: 'Task', size: 80},
-			{accessorKey: 'opcode', header: 'Opcode', size: 90},
+			{
+				accessorKey: 'eventId',
+				header: 'Event ID',
+				size: 85,
+				minSize: 90,
+				mantineTableBodyCellProps: {fz: 'sm', fw: 500}
+			},
+			{
+				accessorKey: 'provider',
+				header: 'Provider',
+				size: 200,
+				minSize: 120,
+				mantineTableBodyCellProps: {fz: 'sm'}
+			},
+			{
+				accessorKey: 'channel',
+				header: 'Channel',
+				size: 140,
+				minSize: 100,
+				mantineTableBodyCellProps: {fz: 'sm', c: 'dimmed'}
+			},
+			{
+				accessorKey: 'task',
+				header: 'Task',
+				size: 80,
+				minSize: 70,
+				mantineTableBodyCellProps: {fz: 'sm'}
+			},
+			{
+				accessorKey: 'opcode',
+				header: 'Opcode',
+				size: 90,
+				minSize: 90,
+				mantineTableBodyCellProps: {fz: 'sm'}
+			},
 			{
 				accessorKey: 'keywords',
 				header: 'Keywords',
 				size: 140,
-				mantineTableBodyCellProps: {ff: 'monospace', fz: '0.8rem'}
+				minSize: 100,
+				mantineTableBodyCellProps: {ff: 'monospace', fz: 'xs', c: 'dimmed'}
 			},
-			{accessorKey: 'version', header: 'Version', size: 80},
-			{accessorKey: 'channel', header: 'Channel', size: 140},
-			{accessorKey: 'computer', header: 'Computer', size: 140},
-			{accessorKey: 'processId', header: 'Process ID', size: 100},
-			{accessorKey: 'threadId', header: 'Thread ID', size: 100},
+			{
+				accessorKey: 'version',
+				header: 'Ver',
+				size: 60,
+				minSize: 50,
+				mantineTableBodyCellProps: {fz: 'sm', c: 'dimmed'}
+			},
+			{
+				accessorKey: 'computer',
+				header: 'Computer',
+				size: 140,
+				minSize: 100,
+				mantineTableBodyCellProps: {fz: 'sm'}
+			},
+			{
+				accessorKey: 'processId',
+				header: 'PID',
+				size: 75,
+				minSize: 60,
+				mantineTableBodyCellProps: {ff: 'monospace', fz: 'xs', c: 'dimmed'}
+			},
+			{
+				accessorKey: 'threadId',
+				header: 'TID',
+				size: 75,
+				minSize: 60,
+				mantineTableBodyCellProps: {ff: 'monospace', fz: 'xs', c: 'dimmed'}
+			},
 			{
 				accessorKey: 'securityUserId',
-				header: 'Security UserID',
-				size: 200,
-				mantineTableBodyCellProps: {ff: 'monospace', fz: '0.75rem'}
+				header: 'User ID',
+				size: 180,
+				minSize: 100,
+				mantineTableBodyCellProps: {ff: 'monospace', fz: 'xs', c: 'dimmed'}
 			},
 			{
 				accessorKey: 'activityId',
 				header: 'Activity ID',
 				size: 140,
-				mantineTableBodyCellProps: {ff: 'monospace', fz: '0.75rem'}
+				minSize: 110,
+				mantineTableBodyCellProps: {ff: 'monospace', fz: 'xs', c: 'dimmed'}
 			},
 			{
 				accessorKey: 'relatedActivityId',
-				header: 'Related Activity ID',
-				size: 160,
-				mantineTableBodyCellProps: {ff: 'monospace', fz: '0.75rem'}
+				header: 'Related Activity',
+				size: 140,
+				minSize: 130,
+				mantineTableBodyCellProps: {ff: 'monospace', fz: 'xs', c: 'dimmed'}
 			},
 			{
 				accessorKey: 'eventData',
 				header: 'Event Data',
-				size: 300,
-				mantineTableBodyCellProps: {style: {whiteSpace: 'pre-wrap' as const}}
+				size: 250,
+				minSize: 120,
+				mantineTableBodyCellProps: {
+					fz: 'xs',
+					c: 'dimmed',
+					style: {whiteSpace: 'pre-wrap' as const}
+				}
 			}
 		],
 		[]
@@ -145,14 +223,19 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 		onExpandedChange: setExpanded,
 		initialState: {density: 'xs'},
 		mantineTableProps: {
-			striped: true,
+			striped: 'odd',
 			highlightOnHover: true,
 			withTableBorder: true,
-			withColumnBorders: true
+			withColumnBorders: false // Remove column borders for cleaner look
+		},
+		mantineTableHeadCellProps: {
+			// Smaller, more compact header styling
+			style: {fontSize: '0.8rem'},
+			className: 'compact-table-header'
 		},
 		mantineTableContainerProps: {style: {maxHeight: '600px'}},
 		renderDetailPanel: ({row}) => (
-			<Code block={true} fz='0.75rem' mah={400} style={{overflow: 'auto'}}>
+			<Code block={true} fz='xs' mah={400} style={{overflow: 'auto'}}>
 				{row.original.xml}
 			</Code>
 		),
