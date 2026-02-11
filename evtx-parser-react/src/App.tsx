@@ -9,6 +9,8 @@ import '@mantine/core/styles.css'
 import '@mantine/dropzone/styles.css'
 // import '@mantine/modals/styles.css'
 import '@mantine/spotlight/styles.css'
+import '@mantine/dates/styles.css'
+import 'mantine-react-table/styles.css'
 
 
 function renderError({error}: FallbackProps) {

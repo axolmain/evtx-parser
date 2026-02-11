@@ -2,6 +2,7 @@ import type {EvtxParseResult} from '@/parser'
 import {discoverChunkOffsets, parseEvtx, parseFileHeader} from '@/parser'
 import {mergeChunkResults} from '@/worker/merge'
 import {ChunkWorkerPool} from '@/worker/worker-pool'
+import {isSharedArrayBufferSupported} from '@/worker/shared-buffer'
 
 interface ParseTimedResult {
 	parseTime: number
@@ -29,8 +30,13 @@ async function parseWithWorkers(
 	const fileHeader = parseFileHeader(buffer, dv)
 	const chunkOffsets = discoverChunkOffsets(buffer, fileHeader)
 
+	// Optimize for SharedArrayBuffer mode:
+	// - If supported: Pass full buffer reference (no slicing)
+	// - If not supported: Slice chunks as before (fallback mode)
+	const useSharedBuffer = isSharedArrayBufferSupported()
+
 	const chunks = chunkOffsets.map((offset, i) => ({
-		buffer: buffer.slice(offset, offset + 65_536),
+		buffer: useSharedBuffer ? buffer : buffer.slice(offset, offset + 65_536),
 		fileOffset: offset,
 		index: i
 	}))

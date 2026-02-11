@@ -3,6 +3,7 @@ import type {
 	ChunkParseSuccess,
 	WorkerResponse
 } from './protocol'
+import {isSharedArrayBufferSupported, toSharedArrayBuffer} from './shared-buffer'
 
 interface PendingBatch {
 	expected: number
@@ -17,9 +18,18 @@ export class ChunkWorkerPool {
 	private batch: PendingBatch | null = null
 	private currentId = 0
 	private workers: Worker[]
+	private useSharedBuffer: boolean
 
 	constructor(size: number) {
 		this.workers = []
+		this.useSharedBuffer = isSharedArrayBufferSupported()
+
+		if (this.useSharedBuffer) {
+			console.log('Worker pool: SharedArrayBuffer mode enabled')
+		} else {
+			console.log('Worker pool: Transferred ArrayBuffer mode (fallback)')
+		}
+
 		for (let i = 0; i < size; i++) {
 			try {
 				const w = new Worker(new URL('./chunk-worker.ts', import.meta.url), {
@@ -65,20 +75,94 @@ export class ChunkWorkerPool {
 				reject
 			}
 
-			// Round-robin assignment: distribute chunks across workers
-			for (let i = 0; i < chunks.length; i++) {
-				const chunk = chunks[i]!
-				const worker = this.workers[i % this.workers.length]!
-				const msg: ChunkParseRequest = {
-					type: 'parse-chunk',
-					id,
-					chunkBuffer: chunk.buffer,
-					chunkFileOffset: chunk.fileOffset,
-					chunkIndex: chunk.index
-				}
-				worker.postMessage(msg, [chunk.buffer])
+			if (this.useSharedBuffer) {
+				// SharedArrayBuffer mode: One copy, zero transfers
+				this.parseChunksShared(chunks, id)
+			} else {
+				// Fallback mode: Transfer ArrayBuffers to workers
+				this.parseChunksTransfer(chunks, id)
 			}
 		})
+	}
+
+	/**
+	 * SharedArrayBuffer mode: Copy all chunk data into one shared buffer,
+	 * then send references to workers (no transfers needed).
+	 */
+	private parseChunksShared(
+		chunks: {buffer: ArrayBuffer; fileOffset: number; index: number}[],
+		id: number
+	): void {
+		// Calculate total size needed
+		const totalSize = chunks.reduce((sum, chunk) => sum + chunk.buffer.byteLength, 0)
+
+		// Create one SharedArrayBuffer for all chunks
+		const combinedBuffer = new ArrayBuffer(totalSize)
+		const combinedView = new Uint8Array(combinedBuffer)
+
+		// Copy all chunks into the combined buffer
+		let currentOffset = 0
+		const chunkMetadata: {offset: number; length: number}[] = []
+
+		for (const chunk of chunks) {
+			const sourceView = new Uint8Array(chunk.buffer)
+			combinedView.set(sourceView, currentOffset)
+			chunkMetadata.push({
+				offset: currentOffset,
+				length: chunk.buffer.byteLength,
+			})
+			currentOffset += chunk.buffer.byteLength
+		}
+
+		// Convert to SharedArrayBuffer
+		const sharedBuffer = toSharedArrayBuffer(combinedBuffer)
+
+		// Send shared reference to workers (no transfer)
+		for (let i = 0; i < chunks.length; i++) {
+			const chunk = chunks[i]!
+			const metadata = chunkMetadata[i]!
+			const worker = this.workers[i % this.workers.length]!
+
+			const msg: ChunkParseRequest = {
+				type: 'parse-chunk',
+				id,
+				chunkIndex: chunk.index,
+				chunkFileOffset: chunk.fileOffset,
+				sharedBuffer,
+				chunkOffset: metadata.offset,
+				chunkLength: metadata.length,
+			}
+
+			// No transferable array - SharedArrayBuffer is shared by reference
+			worker.postMessage(msg)
+		}
+	}
+
+	/**
+	 * Fallback mode: Transfer ArrayBuffers to workers (current behavior).
+	 */
+	private parseChunksTransfer(
+		chunks: {buffer: ArrayBuffer; fileOffset: number; index: number}[],
+		id: number
+	): void {
+		// Round-robin assignment: distribute chunks across workers
+		for (let i = 0; i < chunks.length; i++) {
+			const chunk = chunks[i]!
+			const worker = this.workers[i % this.workers.length]!
+
+			const msg: ChunkParseRequest = {
+				type: 'parse-chunk',
+				id,
+				chunkIndex: chunk.index,
+				chunkFileOffset: chunk.fileOffset,
+				chunkBuffer: chunk.buffer,
+				chunkOffset: 0,
+				chunkLength: chunk.buffer.byteLength,
+			}
+
+			// Transfer ownership of the ArrayBuffer to the worker
+			worker.postMessage(msg, [chunk.buffer])
+		}
 	}
 
 	cancel(): void {

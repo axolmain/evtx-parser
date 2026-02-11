@@ -4,11 +4,13 @@ import path from 'node:path'
 import react from '@vitejs/plugin-react'
 import {defineConfig} from 'vite'
 import {VitePWA} from 'vite-plugin-pwa'
+import {coopCoepPlugin} from './src/vite-plugins/coop-coep'
 
 export default defineConfig(() => ({
 	base: '/evtx-parser/',
 	plugins: [
 		react(),
+		coopCoepPlugin(),
 		VitePWA({
 			registerType: 'autoUpdate',
 			includeAssets: ['favicon.png'],

@@ -8,11 +8,18 @@ import type {
 
 /** Main thread -> Worker */
 export interface ChunkParseRequest {
-	readonly chunkBuffer: ArrayBuffer
-	readonly chunkFileOffset: number
-	readonly chunkIndex: number
-	readonly id: number
 	readonly type: 'parse-chunk'
+	readonly id: number
+	readonly chunkIndex: number
+	readonly chunkFileOffset: number
+
+	// SharedArrayBuffer mode (when supported)
+	readonly sharedBuffer?: SharedArrayBuffer
+	readonly chunkOffset: number
+	readonly chunkLength: number
+
+	// Fallback mode (transferred ArrayBuffer)
+	readonly chunkBuffer?: ArrayBuffer
 }
 
 /** Mergeable subset of TemplateStats produced by one chunk */

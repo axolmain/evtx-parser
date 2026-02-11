@@ -39,7 +39,10 @@ function filetimeToIso(dv: DataView, offset: number): string {
 	return `${d.toISOString().slice(0, 19)}.${String(Number(ft % 10000000n)).padStart(7, '0')}Z`
 }
 
-export function parseFileHeader(buffer: ArrayBuffer, dv: DataView): FileHeader {
+export function parseFileHeader(
+	buffer: ArrayBuffer | SharedArrayBuffer,
+	dv: DataView
+): FileHeader {
 	const sig = new TextDecoder().decode(new Uint8Array(buffer, 0, 8))
 	if (!sig.startsWith('ElfFile')) throw new Error('Not a valid EVTX file')
 	const flags = dv.getUint32(120, true)
@@ -52,7 +55,7 @@ export function parseFileHeader(buffer: ArrayBuffer, dv: DataView): FileHeader {
 }
 
 export function parseChunkHeader(
-	_buffer: ArrayBuffer,
+	_buffer: ArrayBuffer | SharedArrayBuffer,
 	dv: DataView,
 	chunkStart: number
 ): ChunkHeader {
@@ -86,7 +89,7 @@ export function parseChunkHeader(
 }
 
 export function parseRecord(
-	buffer: ArrayBuffer,
+	buffer: ArrayBuffer | SharedArrayBuffer,
 	dv: DataView,
 	recOff: number,
 	chunkStart: number,
@@ -182,7 +185,7 @@ export function validateChunk(
 }
 
 export function parseChunk(
-	buffer: ArrayBuffer,
+	buffer: ArrayBuffer | SharedArrayBuffer,
 	dv: DataView,
 	chunkStart: number
 ): ParsedChunk {

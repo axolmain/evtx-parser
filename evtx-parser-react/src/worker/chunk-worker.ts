@@ -54,12 +54,27 @@ function adjustRecord(r: EvtxRecord, fileOffset: number): EvtxRecord {
 function handleChunk(
 	msg: ChunkParseRequest
 ): ChunkParseError | ChunkParseSuccess {
-	const {chunkBuffer, chunkFileOffset, chunkIndex, id} = msg
+	const {chunkFileOffset, chunkIndex, id, sharedBuffer, chunkBuffer, chunkOffset, chunkLength} = msg
 
 	try {
-		const buffer = chunkBuffer
-		const dv = new DataView(buffer)
-		const chunkStart = 0
+		// Determine buffer mode and create appropriate DataView
+		let buffer: ArrayBuffer | SharedArrayBuffer
+		let dv: DataView
+		let chunkStart: number
+
+		if (sharedBuffer) {
+			// SharedArrayBuffer mode: Use shared buffer with offset/length
+			buffer = sharedBuffer
+			dv = new DataView(sharedBuffer, chunkOffset, chunkLength)
+			chunkStart = chunkOffset
+		} else if (chunkBuffer) {
+			// Fallback mode: Use transferred ArrayBuffer
+			buffer = chunkBuffer
+			dv = new DataView(chunkBuffer, 0, chunkLength)
+			chunkStart = 0
+		} else {
+			throw new Error('No buffer provided (neither sharedBuffer nor chunkBuffer)')
+		}
 
 		const tplStats: TemplateStats = {
 			definitions: {},
