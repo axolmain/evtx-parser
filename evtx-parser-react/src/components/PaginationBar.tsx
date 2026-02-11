@@ -30,34 +30,24 @@ export function PaginationBar({
 	onPageSizeChange
 }: Properties) {
 	return (
-		<Group gap="sm" style={{width: '100%', maxWidth: '700px'}}>
-			<Button
-				variant="default"
-				size="sm"
-				disabled={!hasPrev}
-				onClick={onPrev}
-			>
+		<Group gap='sm' style={{width: '100%', maxWidth: '700px'}}>
+			<Button disabled={!hasPrev} onClick={onPrev} size='sm' variant='default'>
 				← Prev
 			</Button>
-			<Text size="sm" c="dimmed">
+			<Text c='dimmed' size='sm'>
 				Page {currentPage + 1} of {totalPages} ({start + 1}–{end} of{' '}
 				{totalItems})
 			</Text>
-			<Button
-				variant="default"
-				size="sm"
-				disabled={!hasNext}
-				onClick={onNext}
-			>
+			<Button disabled={!hasNext} onClick={onNext} size='sm' variant='default'>
 				Next →
 			</Button>
 			<NativeSelect
-				label="Per page"
 				data={pageSizes.map(String)}
-				value={String(pageSize)}
+				label='Per page'
 				onChange={e => onPageSizeChange(Number(e.currentTarget.value))}
-				size="sm"
+				size='sm'
 				style={{marginLeft: 'auto', width: 'auto'}}
+				value={String(pageSize)}
 			/>
 		</Group>
 	)

@@ -1,20 +1,20 @@
-import { Button, Divider, Group, Stack, Text } from '@mantine/core'
-import { IconLayoutList, IconTable } from '@tabler/icons-react'
-import { useEffect, useMemo, useState } from 'react'
-import type { EvtxParseResult } from '@/parser'
-import { useEvtxParser } from '@/hooks/useEvtxParser'
-import { usePagination } from '@/hooks/usePagination'
-import { CopyButton } from './CopyButton'
-import { DownloadButton } from './DownloadButton'
-import { EventFilters } from './EventFilters'
-import { EventSummary } from './EventSummary'
-import { EventViewer } from './EventViewer'
-import { EventsTable } from './EventsTable'
-import { PaginationBar } from './PaginationBar'
-import { ProgressBar } from './ProgressBar'
-import { StatsDisplay } from './StatsDisplay'
-import { StatusMessage } from './StatusMessage'
-import { WarningsPanel } from './WarningsPanel'
+import {Button, Divider, Group, Stack, Text} from '@mantine/core'
+import {IconLayoutList, IconTable} from '@tabler/icons-react'
+import {useEffect, useMemo, useState} from 'react'
+import {useEvtxParser} from '@/hooks/useEvtxParser'
+import {usePagination} from '@/hooks/usePagination'
+import type {EvtxParseResult} from '@/parser'
+import {CopyButton} from './CopyButton'
+import {DownloadButton} from './DownloadButton'
+import {EventFilters} from './EventFilters'
+import {EventSummary} from './EventSummary'
+import {EventsTable} from './EventsTable'
+import {EventViewer} from './EventViewer'
+import {PaginationBar} from './PaginationBar'
+import {ProgressBar} from './ProgressBar'
+import {StatsDisplay} from './StatsDisplay'
+import {StatusMessage} from './StatusMessage'
+import {WarningsPanel} from './WarningsPanel'
 
 interface EvtxViewerProps {
 	file?: File
@@ -31,7 +31,7 @@ type StatusType = 'error' | 'info' | 'success'
 const PROGRESS_MAP: Record<string, number> = {
 	done: 100,
 	parsing: 50,
-	reading: 25,
+	reading: 25
 }
 
 function getProgress(status: string): number {
@@ -72,12 +72,14 @@ export function EvtxViewer({
 	fileSize: propFileSize,
 	parseTime: propParseTime,
 	onParseComplete,
-	selectedRecordId,
+	selectedRecordId
 }: EvtxViewerProps) {
-	const { state, parseFile } = useEvtxParser()
+	const {state, parseFile} = useEvtxParser()
 	const [viewMode, setViewMode] = useState<ViewMode>('viewer')
 	const [searchQuery, setSearchQuery] = useState('')
-	const [selectedLevels, setSelectedLevels] = useState<number[]>([1, 2, 3, 4, 5])
+	const [selectedLevels, setSelectedLevels] = useState<number[]>([
+		1, 2, 3, 4, 5
+	])
 
 	// Determine if we're using pre-parsed results or parsing a file
 	const isParsedMode = parsedResult !== undefined
@@ -103,8 +105,8 @@ export function EvtxViewer({
 				result: parsedResult,
 				fileName: propFileName || 'unknown',
 				fileSize: propFileSize || 0,
-				parseTime: propParseTime || 0,
-		  }
+				parseTime: propParseTime || 0
+			}
 		: state
 
 	// Filter records based on search and level filters
@@ -114,13 +116,13 @@ export function EvtxViewer({
 		let filtered = effectiveState.result.records
 
 		// Filter by level
-		filtered = filtered.filter((r) => selectedLevels.includes(r.level))
+		filtered = filtered.filter(r => selectedLevels.includes(r.level))
 
 		// Filter by search query
 		if (searchQuery.trim()) {
 			const query = searchQuery.toLowerCase()
 			filtered = filtered.filter(
-				(r) =>
+				r =>
 					r.eventData?.toLowerCase().includes(query) ||
 					r.provider.toLowerCase().includes(query) ||
 					r.eventId.toLowerCase().includes(query) ||
@@ -145,13 +147,16 @@ export function EvtxViewer({
 	const totalRecords = filteredRecords.length
 	const pagination = usePagination(totalRecords)
 
-	const displayRecords = useMemo(() => {
-		return filteredRecords.slice(pagination.start, pagination.end)
-	}, [filteredRecords, pagination.start, pagination.end])
+	const displayRecords = useMemo(
+		() => filteredRecords.slice(pagination.start, pagination.end),
+		[filteredRecords, pagination.start, pagination.end]
+	)
 
 	return (
-		<Stack gap="md" align="center">
-			{!isParsedMode && <ProgressBar progress={getProgress(effectiveState.status)} />}
+		<Stack align='center' gap='md'>
+			{!isParsedMode && (
+				<ProgressBar progress={getProgress(effectiveState.status)} />
+			)}
 			{!isParsedMode && (
 				<StatusMessage
 					message={getStatusMessage(effectiveState)}
@@ -164,32 +169,32 @@ export function EvtxViewer({
 					{/* Summary Bar */}
 					<EventSummary records={effectiveState.result.records} />
 
-					<Divider style={{ width: '100%' }} />
+					<Divider style={{width: '100%'}} />
 
 					{/* Search and Filters */}
-					<Group justify="space-between" style={{ width: '100%' }}>
+					<Group justify='space-between' style={{width: '100%'}}>
 						<EventFilters
-							searchQuery={searchQuery}
-							onSearchChange={setSearchQuery}
-							selectedLevels={selectedLevels}
-							onLevelsChange={setSelectedLevels}
 							levelCounts={levelCounts}
+							onLevelsChange={setSelectedLevels}
+							onSearchChange={setSearchQuery}
+							searchQuery={searchQuery}
+							selectedLevels={selectedLevels}
 						/>
 
-						<Group gap="sm">
+						<Group gap='sm'>
 							<Button
-								variant={viewMode === 'viewer' ? 'filled' : 'default'}
 								leftSection={<IconLayoutList size={18} />}
 								onClick={() => setViewMode('viewer')}
-								size="sm"
+								size='sm'
+								variant={viewMode === 'viewer' ? 'filled' : 'default'}
 							>
 								Viewer
 							</Button>
 							<Button
-								variant={viewMode === 'table' ? 'filled' : 'default'}
 								leftSection={<IconTable size={18} />}
 								onClick={() => setViewMode('table')}
-								size="sm"
+								size='sm'
+								variant={viewMode === 'table' ? 'filled' : 'default'}
 							>
 								Table
 							</Button>
@@ -197,7 +202,7 @@ export function EvtxViewer({
 					</Group>
 
 					{/* Actions Row */}
-					<Group gap="sm" style={{ width: '100%' }}>
+					<Group gap='sm' style={{width: '100%'}}>
 						<WarningsPanel warnings={effectiveState.result.warnings} />
 						<CopyButton disabled={false} text={effectiveState.result.xml} />
 						<DownloadButton
@@ -205,19 +210,29 @@ export function EvtxViewer({
 							fileName={effectiveState.fileName}
 							text={effectiveState.result.xml}
 						/>
-						<Text size="sm" c="dimmed" ml="auto">
+						<Text c='dimmed' ml='auto' size='sm'>
 							Showing {displayRecords.length} of {filteredRecords.length} events
 						</Text>
 					</Group>
 
-					<Divider style={{ width: '100%' }} />
+					<Divider style={{width: '100%'}} />
 
 					{/* Viewer/Table Content */}
-					{viewMode === 'viewer' && <EventViewer records={displayRecords} selectedRecordId={selectedRecordId} />}
-					{viewMode === 'table' && <EventsTable records={displayRecords} selectedRecordId={selectedRecordId} />}
+					{viewMode === 'viewer' && (
+						<EventViewer
+							records={displayRecords}
+							selectedRecordId={selectedRecordId}
+						/>
+					)}
+					{viewMode === 'table' && (
+						<EventsTable
+							records={displayRecords}
+							selectedRecordId={selectedRecordId}
+						/>
+					)}
 
 					{/* Stats and Pagination Row */}
-					<Group justify="space-between" style={{ width: '100%' }}>
+					<Group justify='space-between' style={{width: '100%'}}>
 						<StatsDisplay
 							fileSize={effectiveState.fileSize}
 							numChunks={effectiveState.result.numChunks}

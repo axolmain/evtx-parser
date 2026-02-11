@@ -1,8 +1,13 @@
 import {Badge, Code} from '@mantine/core'
 import {useLocalStorage} from '@mantine/hooks'
-import {type MRT_ColumnDef, type MRT_VisibilityState, MantineReactTable, useMantineReactTable} from 'mantine-react-table'
-import {useEffect, useMemo, useState} from 'react'
 import type {ExpandedState} from '@tanstack/react-table'
+import {
+	MantineReactTable,
+	type MRT_ColumnDef,
+	type MRT_VisibilityState,
+	useMantineReactTable
+} from 'mantine-react-table'
+import {useEffect, useMemo, useState} from 'react'
 import type {ParsedEventRecord} from '@/parser'
 
 interface Properties {
@@ -28,14 +33,15 @@ const DEFAULT_HIDDEN: MRT_VisibilityState = {
 	threadId: false,
 	securityUserId: false,
 	activityId: false,
-	relatedActivityId: false,
+	relatedActivityId: false
 }
 
 export function EventsTable({records, selectedRecordId}: Properties) {
-	const [columnVisibility, setColumnVisibility] = useLocalStorage<MRT_VisibilityState>({
-		key: 'evtx-column-visibility',
-		defaultValue: DEFAULT_HIDDEN,
-	})
+	const [columnVisibility, setColumnVisibility] =
+		useLocalStorage<MRT_VisibilityState>({
+			key: 'evtx-column-visibility',
+			defaultValue: DEFAULT_HIDDEN
+		})
 	const [expanded, setExpanded] = useState<ExpandedState>({})
 
 	// Scroll to and expand row when selectedRecordId changes
@@ -46,7 +52,9 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 		setExpanded({[rowIndex]: true})
 		// Wait for render then scroll to the row
 		requestAnimationFrame(() => {
-			const tableContainer = document.querySelector('.mrt-table-container, [class*="TableContainer"]')
+			const tableContainer = document.querySelector(
+				'.mrt-table-container, [class*="TableContainer"]'
+			)
 			const rows = tableContainer?.querySelectorAll('tbody tr')
 			if (rows) {
 				for (const row of rows) {
@@ -59,64 +67,67 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 		})
 	}, [selectedRecordId, records])
 
-	const columns = useMemo<MRT_ColumnDef<ParsedEventRecord>[]>(() => [
-		{accessorKey: 'recordId', header: 'Record ID', size: 100},
-		{
-			accessorKey: 'timestamp',
-			header: 'Time Created',
-			size: 200,
-			mantineTableBodyCellProps: {ff: 'monospace', fz: '0.8rem'},
-		},
-		{accessorKey: 'provider', header: 'Provider', size: 220},
-		{accessorKey: 'eventId', header: 'Event ID', size: 100},
-		{
-			accessorKey: 'level',
-			header: 'Level',
-			size: 110,
-			Cell: ({row}) => (
-				<Badge color={LEVEL_COLORS[row.original.level] ?? 'gray'} size="sm">
-					{row.original.levelText}
-				</Badge>
-			),
-		},
-		{accessorKey: 'task', header: 'Task', size: 80},
-		{accessorKey: 'opcode', header: 'Opcode', size: 90},
-		{
-			accessorKey: 'keywords',
-			header: 'Keywords',
-			size: 140,
-			mantineTableBodyCellProps: {ff: 'monospace', fz: '0.8rem'},
-		},
-		{accessorKey: 'version', header: 'Version', size: 80},
-		{accessorKey: 'channel', header: 'Channel', size: 140},
-		{accessorKey: 'computer', header: 'Computer', size: 140},
-		{accessorKey: 'processId', header: 'Process ID', size: 100},
-		{accessorKey: 'threadId', header: 'Thread ID', size: 100},
-		{
-			accessorKey: 'securityUserId',
-			header: 'Security UserID',
-			size: 200,
-			mantineTableBodyCellProps: {ff: 'monospace', fz: '0.75rem'},
-		},
-		{
-			accessorKey: 'activityId',
-			header: 'Activity ID',
-			size: 140,
-			mantineTableBodyCellProps: {ff: 'monospace', fz: '0.75rem'},
-		},
-		{
-			accessorKey: 'relatedActivityId',
-			header: 'Related Activity ID',
-			size: 160,
-			mantineTableBodyCellProps: {ff: 'monospace', fz: '0.75rem'},
-		},
-		{
-			accessorKey: 'eventData',
-			header: 'Event Data',
-			size: 300,
-			mantineTableBodyCellProps: {style: {whiteSpace: 'pre-wrap' as const}},
-		},
-	], [])
+	const columns = useMemo<MRT_ColumnDef<ParsedEventRecord>[]>(
+		() => [
+			{accessorKey: 'recordId', header: 'Record ID', size: 100},
+			{
+				accessorKey: 'timestamp',
+				header: 'Time Created',
+				size: 200,
+				mantineTableBodyCellProps: {ff: 'monospace', fz: '0.8rem'}
+			},
+			{accessorKey: 'provider', header: 'Provider', size: 220},
+			{accessorKey: 'eventId', header: 'Event ID', size: 100},
+			{
+				accessorKey: 'level',
+				header: 'Level',
+				size: 110,
+				Cell: ({row}) => (
+					<Badge color={LEVEL_COLORS[row.original.level] ?? 'gray'} size='sm'>
+						{row.original.levelText}
+					</Badge>
+				)
+			},
+			{accessorKey: 'task', header: 'Task', size: 80},
+			{accessorKey: 'opcode', header: 'Opcode', size: 90},
+			{
+				accessorKey: 'keywords',
+				header: 'Keywords',
+				size: 140,
+				mantineTableBodyCellProps: {ff: 'monospace', fz: '0.8rem'}
+			},
+			{accessorKey: 'version', header: 'Version', size: 80},
+			{accessorKey: 'channel', header: 'Channel', size: 140},
+			{accessorKey: 'computer', header: 'Computer', size: 140},
+			{accessorKey: 'processId', header: 'Process ID', size: 100},
+			{accessorKey: 'threadId', header: 'Thread ID', size: 100},
+			{
+				accessorKey: 'securityUserId',
+				header: 'Security UserID',
+				size: 200,
+				mantineTableBodyCellProps: {ff: 'monospace', fz: '0.75rem'}
+			},
+			{
+				accessorKey: 'activityId',
+				header: 'Activity ID',
+				size: 140,
+				mantineTableBodyCellProps: {ff: 'monospace', fz: '0.75rem'}
+			},
+			{
+				accessorKey: 'relatedActivityId',
+				header: 'Related Activity ID',
+				size: 160,
+				mantineTableBodyCellProps: {ff: 'monospace', fz: '0.75rem'}
+			},
+			{
+				accessorKey: 'eventData',
+				header: 'Event Data',
+				size: 300,
+				mantineTableBodyCellProps: {style: {whiteSpace: 'pre-wrap' as const}}
+			}
+		],
+		[]
+	)
 
 	const table = useMantineReactTable({
 		columns,
@@ -133,16 +144,21 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 		onColumnVisibilityChange: setColumnVisibility,
 		onExpandedChange: setExpanded,
 		initialState: {density: 'xs'},
-		mantineTableProps: {striped: true, highlightOnHover: true, withTableBorder: true, withColumnBorders: true},
+		mantineTableProps: {
+			striped: true,
+			highlightOnHover: true,
+			withTableBorder: true,
+			withColumnBorders: true
+		},
 		mantineTableContainerProps: {style: {maxHeight: '600px'}},
 		renderDetailPanel: ({row}) => (
-			<Code block fz="0.75rem" mah={400} style={{overflow: 'auto'}}>
+			<Code block={true} fz='0.75rem' mah={400} style={{overflow: 'auto'}}>
 				{row.original.xml}
 			</Code>
 		),
 		mantineTableBodyRowProps: () => ({
-			style: {cursor: 'pointer'},
-		}),
+			style: {cursor: 'pointer'}
+		})
 	})
 
 	if (records.length === 0) {

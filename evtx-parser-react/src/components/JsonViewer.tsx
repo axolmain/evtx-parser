@@ -10,10 +10,15 @@ import {
 	Stack,
 	Text,
 	Title,
-	Tooltip,
+	Tooltip
 } from '@mantine/core'
-import { IconAlertCircle, IconCheck, IconCopy, IconDownload } from '@tabler/icons-react'
-import { useMemo } from 'react'
+import {
+	IconAlertCircle,
+	IconCheck,
+	IconCopy,
+	IconDownload
+} from '@tabler/icons-react'
+import {useMemo} from 'react'
 
 interface JsonViewerProps {
 	content: unknown
@@ -21,7 +26,7 @@ interface JsonViewerProps {
 }
 
 function downloadFile(content: string, fileName: string) {
-	const blob = new Blob([content], { type: 'application/json' })
+	const blob = new Blob([content], {type: 'application/json'})
 	const url = URL.createObjectURL(blob)
 	const link = document.createElement('a')
 	link.href = url
@@ -32,11 +37,11 @@ function downloadFile(content: string, fileName: string) {
 	URL.revokeObjectURL(url)
 }
 
-export function JsonViewer({ content, fileName }: JsonViewerProps) {
+export function JsonViewer({content, fileName}: JsonViewerProps) {
 	const formatted = useMemo(() => {
 		try {
 			return JSON.stringify(content, null, 2)
-		} catch (error) {
+		} catch {
 			return null
 		}
 	}, [content])
@@ -50,12 +55,12 @@ export function JsonViewer({ content, fileName }: JsonViewerProps) {
 
 	if (parseError) {
 		return (
-			<Stack gap="md" style={{ width: '100%' }}>
+			<Stack gap='md' style={{width: '100%'}}>
 				<Title order={3}>{fileName}</Title>
 				<Alert
+					color='red'
 					icon={<IconAlertCircle size={16} />}
-					title="JSON Parse Error"
-					color="red"
+					title='JSON Parse Error'
 				>
 					{parseError}
 				</Alert>
@@ -65,30 +70,33 @@ export function JsonViewer({ content, fileName }: JsonViewerProps) {
 
 	return (
 		<Stack
-			gap="md"
+			gap='md'
 			style={{
 				width: '100%',
 				maxHeight: 'calc(100vh - 4rem)',
 				position: 'sticky',
-				top: '2rem',
+				top: '2rem'
 			}}
 		>
 			{/* Sticky Header */}
-			<Group justify="space-between">
-				<Group gap="xs">
+			<Group justify='space-between'>
+				<Group gap='xs'>
 					<Title order={3}>{fileName}</Title>
-					<Text size="sm" c="dimmed">
-						{formatted!.split('\n').length} lines
+					<Text c='dimmed' size='sm'>
+						{formatted?.split('\n').length} lines
 					</Text>
 				</Group>
-				<Group gap="xs">
-					<CopyButton value={formatted!} timeout={2000}>
-						{({ copied, copy }) => (
-							<Tooltip label={copied ? 'Copied' : 'Copy to clipboard'} withArrow>
+				<Group gap='xs'>
+					<CopyButton timeout={2000} value={formatted!}>
+						{({copied, copy}) => (
+							<Tooltip
+								label={copied ? 'Copied' : 'Copy to clipboard'}
+								withArrow={true}
+							>
 								<ActionIcon
 									color={copied ? 'teal' : 'gray'}
-									variant="subtle"
 									onClick={copy}
+									variant='subtle'
 								>
 									{copied ? <IconCheck size={18} /> : <IconCopy size={18} />}
 								</ActionIcon>
@@ -96,10 +104,10 @@ export function JsonViewer({ content, fileName }: JsonViewerProps) {
 						)}
 					</CopyButton>
 					<Button
-						size="xs"
-						variant="light"
 						leftSection={<IconDownload size={16} />}
 						onClick={() => downloadFile(formatted!, fileName)}
+						size='xs'
+						variant='light'
 					>
 						Download
 					</Button>
@@ -108,17 +116,17 @@ export function JsonViewer({ content, fileName }: JsonViewerProps) {
 
 			{/* Scrollable Content */}
 			<Paper
-				withBorder
-				p="md"
+				p='md'
 				style={{
 					overflow: 'hidden',
 					display: 'flex',
 					flexDirection: 'column',
-					height: 'calc(100vh - 11rem - 20px)',
+					height: 'calc(100vh - 11rem - 20px)'
 				}}
+				withBorder={true}
 			>
-				<ScrollArea h="100%">
-					<Code block style={{ fontSize: '0.875rem' }}>
+				<ScrollArea h='100%'>
+					<Code block={true} style={{fontSize: '0.875rem'}}>
 						{formatted}
 					</Code>
 				</ScrollArea>

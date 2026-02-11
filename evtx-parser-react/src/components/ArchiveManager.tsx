@@ -10,18 +10,18 @@ import {
 	Progress,
 	Stack,
 	Text,
-	Tooltip,
+	Tooltip
 } from '@mantine/core'
 import {
 	IconArchive,
 	IconDatabase,
 	IconDownload,
 	IconTrash,
-	IconTrashX,
+	IconTrashX
 } from '@tabler/icons-react'
-import { useEffect, useState } from 'react'
-import type { Archive } from '@/db/schema'
-import { formatBytes, getStorageEstimate } from '@/db/schema'
+import {useEffect, useState} from 'react'
+import type {Archive} from '@/db/schema'
+import {formatBytes, getStorageEstimate} from '@/db/schema'
 import * as dbService from '@/db/service'
 
 interface ArchiveManagerProps {
@@ -39,12 +39,12 @@ interface StorageStats {
 export function ArchiveManager({
 	archives,
 	onLoadArchive,
-	onArchivesChange,
+	onArchivesChange
 }: ArchiveManagerProps) {
 	const [storageStats, setStorageStats] = useState<StorageStats>({
 		usage: 0,
 		quota: 0,
-		usagePercent: 0,
+		usagePercent: 0
 	})
 	const [deleteModalOpen, setDeleteModalOpen] = useState(false)
 	const [clearModalOpen, setClearModalOpen] = useState(false)
@@ -62,7 +62,7 @@ export function ArchiveManager({
 		// Refresh every 5 seconds
 		const interval = setInterval(loadStats, 5000)
 		return () => clearInterval(interval)
-	}, [archives])
+	}, [])
 
 	const handleDeleteArchive = async (archive: Archive) => {
 		setArchiveToDelete(archive)
@@ -78,8 +78,7 @@ export function ArchiveManager({
 			setDeleteModalOpen(false)
 			setArchiveToDelete(null)
 			onArchivesChange?.()
-		} catch (error) {
-			console.error('Failed to delete archive:', error)
+		} catch {
 			alert('Failed to delete archive')
 		} finally {
 			setIsDeleting(false)
@@ -96,32 +95,30 @@ export function ArchiveManager({
 			await dbService.clearAllArchives()
 			setClearModalOpen(false)
 			onArchivesChange?.()
-		} catch (error) {
-			console.error('Failed to clear archives:', error)
+		} catch {
 			alert('Failed to clear archives')
 		} finally {
 			setIsDeleting(false)
 		}
 	}
 
-	const formatDate = (date: Date) => {
-		return new Intl.DateTimeFormat('en-US', {
+	const formatDate = (date: Date) =>
+		new Intl.DateTimeFormat('en-US', {
 			month: 'short',
 			day: 'numeric',
 			year: 'numeric',
 			hour: 'numeric',
-			minute: '2-digit',
+			minute: '2-digit'
 		}).format(new Date(date))
-	}
 
 	if (archives.length === 0) {
 		return (
-			<Paper p="xl" withBorder style={{ textAlign: 'center' }}>
-				<IconArchive size={48} color="var(--mantine-color-dimmed)" />
-				<Text size="lg" mt="md" fw={500}>
+			<Paper p='xl' style={{textAlign: 'center'}} withBorder={true}>
+				<IconArchive color='var(--mantine-color-dimmed)' size={48} />
+				<Text fw={500} mt='md' size='lg'>
 					No Recent Archives
 				</Text>
-				<Text size="sm" c="dimmed" mt="xs">
+				<Text c='dimmed' mt='xs' size='sm'>
 					Upload a SysInfoZip archive to get started
 				</Text>
 			</Paper>
@@ -129,22 +126,21 @@ export function ArchiveManager({
 	}
 
 	return (
-		<Stack gap="md">
+		<Stack gap='md'>
 			{/* Storage Stats */}
-			<Card withBorder>
-				<Group justify="space-between" mb="xs">
-					<Group gap="xs">
+			<Card withBorder={true}>
+				<Group justify='space-between' mb='xs'>
+					<Group gap='xs'>
 						<IconDatabase size={20} />
 						<Text fw={500}>Storage Usage</Text>
 					</Group>
-					<Badge variant="light">
-						{formatBytes(storageStats.usage)} / {formatBytes(storageStats.quota)}
+					<Badge variant='light'>
+						{formatBytes(storageStats.usage)} /{' '}
+						{formatBytes(storageStats.quota)}
 					</Badge>
 				</Group>
 
 				<Progress
-					value={storageStats.usagePercent}
-					size="lg"
 					color={
 						storageStats.usagePercent > 80
 							? 'red'
@@ -152,14 +148,16 @@ export function ArchiveManager({
 								? 'yellow'
 								: 'blue'
 					}
+					size='lg'
+					value={storageStats.usagePercent}
 				/>
 
-				<Group justify="space-between" mt="xs">
-					<Text size="xs" c="dimmed">
+				<Group justify='space-between' mt='xs'>
+					<Text c='dimmed' size='xs'>
 						{storageStats.usagePercent.toFixed(1)}% used
 					</Text>
 					{storageStats.usagePercent > 80 && (
-						<Text size="xs" c="red">
+						<Text c='red' size='xs'>
 							Consider clearing old archives
 						</Text>
 					)}
@@ -167,22 +165,22 @@ export function ArchiveManager({
 			</Card>
 
 			{/* Archives List Header */}
-			<Group justify="space-between">
-				<Group gap="xs">
+			<Group justify='space-between'>
+				<Group gap='xs'>
 					<IconArchive size={20} />
 					<Text fw={500}>Recent Archives</Text>
-					<Badge size="sm" variant="light">
+					<Badge size='sm' variant='light'>
 						{archives.length}
 					</Badge>
 				</Group>
 
 				{archives.length > 0 && (
 					<Button
-						size="xs"
-						variant="light"
-						color="red"
+						color='red'
 						leftSection={<IconTrashX size={14} />}
 						onClick={handleClearAll}
+						size='xs'
+						variant='light'
 					>
 						Clear All
 					</Button>
@@ -190,55 +188,55 @@ export function ArchiveManager({
 			</Group>
 
 			{/* Archives List */}
-			<Stack gap="xs">
-				{archives.map((archive) => (
-					<Card key={archive.id} padding="sm" withBorder>
-						<Group justify="space-between" wrap="nowrap">
-							<Box style={{ flex: 1, minWidth: 0 }}>
-								<Group gap="xs" wrap="nowrap">
+			<Stack gap='xs'>
+				{archives.map(archive => (
+					<Card key={archive.id} padding='sm' withBorder={true}>
+						<Group justify='space-between' wrap='nowrap'>
+							<Box style={{flex: 1, minWidth: 0}}>
+								<Group gap='xs' wrap='nowrap'>
 									<IconArchive size={18} />
 									<Text
 										fw={500}
-										size="sm"
+										size='sm'
 										style={{
 											overflow: 'hidden',
 											textOverflow: 'ellipsis',
-											whiteSpace: 'nowrap',
+											whiteSpace: 'nowrap'
 										}}
 									>
 										{archive.name}
 									</Text>
 								</Group>
 
-								<Group gap="md" mt={4}>
-									<Text size="xs" c="dimmed">
+								<Group gap='md' mt={4}>
+									<Text c='dimmed' size='xs'>
 										{formatDate(archive.uploadedAt)}
 									</Text>
-									<Text size="xs" c="dimmed">
+									<Text c='dimmed' size='xs'>
 										{archive.fileCount} files
 									</Text>
-									<Text size="xs" c="dimmed">
+									<Text c='dimmed' size='xs'>
 										{formatBytes(archive.totalSize)}
 									</Text>
 								</Group>
 							</Box>
 
-							<Group gap="xs">
-								<Tooltip label="Load archive">
+							<Group gap='xs'>
+								<Tooltip label='Load archive'>
 									<ActionIcon
-										variant="light"
-										color="blue"
+										color='blue'
 										onClick={() => onLoadArchive(archive.id)}
+										variant='light'
 									>
 										<IconDownload size={18} />
 									</ActionIcon>
 								</Tooltip>
 
-								<Tooltip label="Delete archive">
+								<Tooltip label='Delete archive'>
 									<ActionIcon
-										variant="light"
-										color="red"
+										color='red'
 										onClick={() => handleDeleteArchive(archive)}
+										variant='light'
 									>
 										<IconTrash size={18} />
 									</ActionIcon>
@@ -251,32 +249,32 @@ export function ArchiveManager({
 
 			{/* Delete Confirmation Modal */}
 			<Modal
-				opened={deleteModalOpen}
+				centered={true}
 				onClose={() => !isDeleting && setDeleteModalOpen(false)}
-				title="Delete Archive"
-				centered
+				opened={deleteModalOpen}
+				title='Delete Archive'
 			>
-				<Stack gap="md">
+				<Stack gap='md'>
 					<Text>
 						Are you sure you want to delete{' '}
 						<strong>{archiveToDelete?.name}</strong>?
 					</Text>
-					<Text size="sm" c="dimmed">
+					<Text c='dimmed' size='sm'>
 						This will remove the archive and all associated files and indexed
 						events. This action cannot be undone.
 					</Text>
-					<Group justify="flex-end">
+					<Group justify='flex-end'>
 						<Button
-							variant="subtle"
-							onClick={() => setDeleteModalOpen(false)}
 							disabled={isDeleting}
+							onClick={() => setDeleteModalOpen(false)}
+							variant='subtle'
 						>
 							Cancel
 						</Button>
 						<Button
-							color="red"
-							onClick={confirmDeleteArchive}
+							color='red'
 							loading={isDeleting}
+							onClick={confirmDeleteArchive}
 						>
 							Delete
 						</Button>
@@ -286,29 +284,29 @@ export function ArchiveManager({
 
 			{/* Clear All Confirmation Modal */}
 			<Modal
-				opened={clearModalOpen}
+				centered={true}
 				onClose={() => !isDeleting && setClearModalOpen(false)}
-				title="Clear All Archives"
-				centered
+				opened={clearModalOpen}
+				title='Clear All Archives'
 			>
-				<Stack gap="md">
+				<Stack gap='md'>
 					<Text>
-						Are you sure you want to clear <strong>all {archives.length}</strong>{' '}
-						archives?
+						Are you sure you want to clear{' '}
+						<strong>all {archives.length}</strong> archives?
 					</Text>
-					<Text size="sm" c="dimmed">
+					<Text c='dimmed' size='sm'>
 						This will permanently delete all archives, files, and indexed events
 						from your browser storage. This action cannot be undone.
 					</Text>
-					<Group justify="flex-end">
+					<Group justify='flex-end'>
 						<Button
-							variant="subtle"
-							onClick={() => setClearModalOpen(false)}
 							disabled={isDeleting}
+							onClick={() => setClearModalOpen(false)}
+							variant='subtle'
 						>
 							Cancel
 						</Button>
-						<Button color="red" onClick={confirmClearAll} loading={isDeleting}>
+						<Button color='red' loading={isDeleting} onClick={confirmClearAll}>
 							Clear All
 						</Button>
 					</Group>

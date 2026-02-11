@@ -11,10 +11,10 @@ export function CopyButton({text, disabled}: Properties) {
 
 	return (
 		<Button
-			variant="default"
-			size="sm"
 			disabled={disabled ?? false}
 			onClick={() => clipboard.copy(text)}
+			size='sm'
+			variant='default'
 		>
 			{clipboard.copied ? 'Copied!' : 'Copy XML'}
 		</Button>

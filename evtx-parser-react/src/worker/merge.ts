@@ -1,5 +1,10 @@
 import {hex32} from '@/parser/helpers'
-import type {EvtxParseResult, FileHeader, ParsedEventRecord, TemplateStats} from '@/parser/types'
+import type {
+	EvtxParseResult,
+	FileHeader,
+	ParsedEventRecord,
+	TemplateStats
+} from '@/parser/types'
 import type {ChunkParseSuccess} from './protocol'
 
 export function mergeChunkResults(

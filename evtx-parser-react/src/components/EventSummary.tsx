@@ -34,25 +34,35 @@ export function EventSummary({records}: Properties) {
 
 	const formatDate = (iso: string) => {
 		const date = new Date(iso)
-		return date.toLocaleDateString('en-US', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})
+		return date.toLocaleDateString('en-US', {
+			month: 'short',
+			day: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		})
 	}
 
 	return (
-		<Group gap="lg">
-			<Group gap="xs">
+		<Group gap='lg'>
+			<Group gap='xs'>
 				{[1, 2, 3, 4, 5].map(level => {
 					const count = levelCounts[level] || 0
 					if (count === 0) return null
 					const color = LEVEL_COLORS[level]
 					return (
-						<Badge key={level} {...(color && { color })} size="lg" variant="light">
+						<Badge
+							key={level}
+							{...(color && {color})}
+							size='lg'
+							variant='light'
+						>
 							{count} {LEVEL_NAMES[level]}
 						</Badge>
 					)
 				})}
 			</Group>
 			{minDate && maxDate && (
-				<Text size="sm" c="dimmed">
+				<Text c='dimmed' size='sm'>
 					{formatDate(minDate)} → {formatDate(maxDate)}
 				</Text>
 			)}

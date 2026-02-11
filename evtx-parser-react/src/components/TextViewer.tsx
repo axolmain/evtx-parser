@@ -8,9 +8,9 @@ import {
 	Stack,
 	Text,
 	Title,
-	Tooltip,
+	Tooltip
 } from '@mantine/core'
-import { IconCheck, IconCopy, IconDownload } from '@tabler/icons-react'
+import {IconCheck, IconCopy, IconDownload} from '@tabler/icons-react'
 
 interface TextViewerProps {
 	content: string
@@ -18,7 +18,7 @@ interface TextViewerProps {
 }
 
 function downloadFile(content: string, fileName: string) {
-	const blob = new Blob([content], { type: 'text/plain' })
+	const blob = new Blob([content], {type: 'text/plain'})
 	const url = URL.createObjectURL(blob)
 	const link = document.createElement('a')
 	link.href = url
@@ -29,28 +29,31 @@ function downloadFile(content: string, fileName: string) {
 	URL.revokeObjectURL(url)
 }
 
-export function TextViewer({ content, fileName }: TextViewerProps) {
+export function TextViewer({content, fileName}: TextViewerProps) {
 	return (
 		<Stack
-			gap="md"
+			gap='md'
 			style={{
 				width: '100%',
 				maxHeight: 'calc(100vh - 4rem)',
 				position: 'sticky',
-				top: '2rem',
+				top: '2rem'
 			}}
 		>
 			{/* Sticky Header */}
-			<Group justify="space-between">
+			<Group justify='space-between'>
 				<Title order={3}>{fileName}</Title>
-				<Group gap="xs">
-					<CopyButton value={content} timeout={2000}>
-						{({ copied, copy }) => (
-							<Tooltip label={copied ? 'Copied' : 'Copy to clipboard'} withArrow>
+				<Group gap='xs'>
+					<CopyButton timeout={2000} value={content}>
+						{({copied, copy}) => (
+							<Tooltip
+								label={copied ? 'Copied' : 'Copy to clipboard'}
+								withArrow={true}
+							>
 								<ActionIcon
 									color={copied ? 'teal' : 'gray'}
-									variant="subtle"
 									onClick={copy}
+									variant='subtle'
 								>
 									{copied ? <IconCheck size={18} /> : <IconCopy size={18} />}
 								</ActionIcon>
@@ -58,10 +61,10 @@ export function TextViewer({ content, fileName }: TextViewerProps) {
 						)}
 					</CopyButton>
 					<Button
-						size="xs"
-						variant="light"
 						leftSection={<IconDownload size={16} />}
 						onClick={() => downloadFile(content, fileName)}
+						size='xs'
+						variant='light'
 					>
 						Download
 					</Button>
@@ -70,24 +73,24 @@ export function TextViewer({ content, fileName }: TextViewerProps) {
 
 			{/* Scrollable Content */}
 			<Paper
-				withBorder
-				p="md"
+				p='md'
 				style={{
 					overflow: 'hidden',
 					display: 'flex',
 					flexDirection: 'column',
-					height: 'calc(100vh - 11rem - 20px)',
+					height: 'calc(100vh - 11rem - 20px)'
 				}}
+				withBorder={true}
 			>
-				<ScrollArea h="100%">
+				<ScrollArea h='100%'>
 					<Text
-						component="pre"
-						ff="monospace"
-						size="sm"
+						component='pre'
+						ff='monospace'
+						size='sm'
 						style={{
 							whiteSpace: 'pre-wrap',
 							wordBreak: 'break-word',
-							margin: 0,
+							margin: 0
 						}}
 					>
 						{content}

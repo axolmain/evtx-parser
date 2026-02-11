@@ -26,7 +26,7 @@ export function StatsDisplay({
 	}
 
 	return (
-		<Text size="xs" c="dimmed" style={{marginLeft: 'auto'}}>
+		<Text c='dimmed' size='xs' style={{marginLeft: 'auto'}}>
 			{text}
 		</Text>
 	)

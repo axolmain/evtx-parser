@@ -1,16 +1,17 @@
-import {describe, it, expect} from 'vitest'
+import {describe, expect, it} from 'vitest'
 import {
-	isSharedArrayBufferSupported,
-	toSharedArrayBuffer,
-	createSharedView,
 	createSharedUint8View,
+	createSharedView,
+	isSharedArrayBufferSupported,
+	toSharedArrayBuffer
 } from './shared-buffer'
 
 describe('shared-buffer utilities', () => {
 	describe('isSharedArrayBufferSupported', () => {
 		it('should return false if SharedArrayBuffer is undefined', () => {
 			const originalSAB = globalThis.SharedArrayBuffer
-			;(globalThis as {SharedArrayBuffer: unknown}).SharedArrayBuffer = undefined
+			;(globalThis as {SharedArrayBuffer: unknown}).SharedArrayBuffer =
+				undefined
 
 			const result = isSharedArrayBufferSupported()
 
@@ -22,7 +23,7 @@ describe('shared-buffer utilities', () => {
 			const originalCrossOriginIsolated = globalThis.crossOriginIsolated
 			Object.defineProperty(globalThis, 'crossOriginIsolated', {
 				value: false,
-				configurable: true,
+				configurable: true
 			})
 
 			const result = isSharedArrayBufferSupported()
@@ -30,7 +31,7 @@ describe('shared-buffer utilities', () => {
 			expect(result).toBe(false)
 			Object.defineProperty(globalThis, 'crossOriginIsolated', {
 				value: originalCrossOriginIsolated,
-				configurable: true,
+				configurable: true
 			})
 		})
 
@@ -38,7 +39,7 @@ describe('shared-buffer utilities', () => {
 			const originalCrossOriginIsolated = globalThis.crossOriginIsolated
 			Object.defineProperty(globalThis, 'crossOriginIsolated', {
 				value: undefined,
-				configurable: true,
+				configurable: true
 			})
 
 			const result = isSharedArrayBufferSupported()
@@ -46,7 +47,7 @@ describe('shared-buffer utilities', () => {
 			expect(result).toBe(false)
 			Object.defineProperty(globalThis, 'crossOriginIsolated', {
 				value: originalCrossOriginIsolated,
-				configurable: true,
+				configurable: true
 			})
 		})
 

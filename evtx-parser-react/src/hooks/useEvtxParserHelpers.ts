@@ -1,8 +1,8 @@
 import type {EvtxParseResult} from '@/parser'
 import {discoverChunkOffsets, parseEvtx, parseFileHeader} from '@/parser'
 import {mergeChunkResults} from '@/worker/merge'
-import {ChunkWorkerPool} from '@/worker/worker-pool'
 import {isSharedArrayBufferSupported} from '@/worker/shared-buffer'
+import {ChunkWorkerPool} from '@/worker/worker-pool'
 
 interface ParseTimedResult {
 	parseTime: number

@@ -1,6 +1,6 @@
-import Dexie, { type EntityTable } from 'dexie'
-import type { EvtxParseResult } from '@/parser'
-import type { FileType } from '@/hooks/useFileViewer'
+import Dexie, {type EntityTable} from 'dexie'
+import type {FileType} from '@/lib/fileTypes'
+import type {EvtxParseResult} from '@/parser'
 
 // Archive metadata
 export interface Archive {
@@ -72,7 +72,7 @@ export class SysInfoZipDB extends Dexie {
 
 			// Events table - indexed for search performance
 			events:
-				'id, archiveId, fileId, eventId, provider, level, computer, timestamp, [archiveId+level], [fileId+eventId]',
+				'id, archiveId, fileId, eventId, provider, level, computer, timestamp, [archiveId+level], [fileId+eventId]'
 		})
 	}
 }
@@ -92,10 +92,10 @@ export async function getStorageEstimate(): Promise<{
 		const quota = estimate.quota || 0
 		const usagePercent = quota > 0 ? (usage / quota) * 100 : 0
 
-		return { usage, quota, usagePercent }
+		return {usage, quota, usagePercent}
 	}
 
-	return { usage: 0, quota: 0, usagePercent: 0 }
+	return {usage: 0, quota: 0, usagePercent: 0}
 }
 
 // Helper to format bytes

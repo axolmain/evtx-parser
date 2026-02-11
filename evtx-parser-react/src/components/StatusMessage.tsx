@@ -16,7 +16,7 @@ export function StatusMessage({message, type = 'info'}: Properties) {
 	return (
 		<Text
 			c={colorMap[type]}
-			size="sm"
+			size='sm'
 			style={{width: '100%', maxWidth: '700px', minHeight: '1.2em'}}
 		>
 			{message}

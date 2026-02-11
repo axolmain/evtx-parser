@@ -19,10 +19,10 @@ export function DownloadButton({text, fileName, disabled}: Properties) {
 
 	return (
 		<Button
-			variant="default"
-			size="sm"
 			disabled={disabled ?? false}
 			onClick={handleClick}
+			size='sm'
+			variant='default'
 		>
 			Download XML
 		</Button>

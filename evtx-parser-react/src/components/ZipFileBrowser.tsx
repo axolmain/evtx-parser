@@ -1,14 +1,31 @@
-import { Badge, Box, Group, Loader, Paper, Stack, Text, Title, Tooltip } from '@mantine/core'
+import {
+	Badge,
+	Box,
+	Group,
+	Loader,
+	Paper,
+	Stack,
+	Text,
+	Title,
+	Tooltip
+} from '@mantine/core'
 import {
 	IconFileText,
 	IconFileTypography,
 	IconJson,
-	IconQuestionMark,
+	IconQuestionMark
 } from '@tabler/icons-react'
-import type { ZipFileEntry } from '@/hooks/useFileViewer'
+import type {FileType} from '@/lib/fileTypes'
+
+export interface FileEntry {
+	name: string
+	size: number
+	compressedSize: number
+	type: FileType
+}
 
 interface ZipFileBrowserProps {
-	entries: ZipFileEntry[]
+	entries: FileEntry[]
 	currentFile: string | null
 	onFileClick: (fileName: string) => void
 	loadingFile?: string | null
@@ -47,48 +64,46 @@ function getFileColor(type: string): string {
 }
 
 interface FileListItemProps {
-	entry: ZipFileEntry
+	entry: FileEntry
 	active: boolean
 	onClick: () => void
 	isLoading: boolean
 }
 
-function FileListItem({ entry, active, onClick, isLoading }: FileListItemProps) {
+function FileListItem({entry, active, onClick, isLoading}: FileListItemProps) {
 	return (
 		<Paper
-			p="sm"
-			withBorder={active}
+			onClick={onClick}
+			p='sm'
 			style={{
 				cursor: 'pointer',
-				backgroundColor: active
-					? 'var(--mantine-color-dark-6)'
-					: 'transparent',
+				backgroundColor: active ? 'var(--mantine-color-dark-6)' : 'transparent',
 				borderColor: active ? 'var(--mantine-color-blue-6)' : 'transparent',
-				transition: 'all 0.15s ease',
+				transition: 'all 0.15s ease'
 			}}
-			onClick={onClick}
+			withBorder={active}
 		>
-			<Group gap="sm" wrap="nowrap">
+			<Group gap='sm' wrap='nowrap'>
 				<Box c={getFileColor(entry.type)}>{getFileIcon(entry.type)}</Box>
-				<Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
-					<Tooltip label={entry.name} disabled={entry.name.length < 30}>
+				<Stack gap={2} style={{flex: 1, minWidth: 0}}>
+					<Tooltip disabled={entry.name.length < 30} label={entry.name}>
 						<Text
-							size="sm"
 							fw={active ? 600 : 400}
+							size='sm'
 							style={{
 								overflow: 'hidden',
 								textOverflow: 'ellipsis',
-								whiteSpace: 'nowrap',
+								whiteSpace: 'nowrap'
 							}}
 						>
 							{entry.name}
 						</Text>
 					</Tooltip>
-					<Text size="xs" c="dimmed">
+					<Text c='dimmed' size='xs'>
 						{formatFileSize(entry.size)}
 					</Text>
 				</Stack>
-				{isLoading && <Loader size="xs" />}
+				{isLoading && <Loader size='xs' />}
 			</Group>
 		</Paper>
 	)
@@ -98,55 +113,55 @@ export function ZipFileBrowser({
 	entries,
 	currentFile,
 	onFileClick,
-	loadingFile = null,
+	loadingFile = null
 }: ZipFileBrowserProps) {
 	// Group files by type
-	const evtxFiles: ZipFileEntry[] = entries.filter((e) => e.type === 'evtx')
-	const jsonFiles: ZipFileEntry[] = entries.filter((e) => e.type === 'json')
-	const xmlFiles: ZipFileEntry[] = entries.filter((e) => e.type === 'xml')
-	const txtFiles: ZipFileEntry[] = entries.filter((e) => e.type === 'txt')
-	const unknownFiles: ZipFileEntry[] = entries.filter((e) => e.type === 'unknown')
+	const evtxFiles: FileEntry[] = entries.filter(e => e.type === 'evtx')
+	const jsonFiles: FileEntry[] = entries.filter(e => e.type === 'json')
+	const xmlFiles: FileEntry[] = entries.filter(e => e.type === 'xml')
+	const txtFiles: FileEntry[] = entries.filter(e => e.type === 'txt')
+	const unknownFiles: FileEntry[] = entries.filter(e => e.type === 'unknown')
 
 	return (
 		<Paper
-			w={300}
-			h="calc(100vh - 4rem)"
-			p="md"
-			withBorder
+			h='calc(100vh - 4rem)'
+			p='md'
 			style={{
 				display: 'flex',
 				flexDirection: 'column',
 				position: 'sticky',
-				top: '2rem',
+				top: '2rem'
 			}}
+			w={300}
+			withBorder={true}
 		>
-			<Stack gap="md" style={{ flex: 1, overflow: 'hidden' }}>
-				<Group justify="space-between">
+			<Stack gap='md' style={{flex: 1, overflow: 'hidden'}}>
+				<Group justify='space-between'>
 					<Title order={4}>Files</Title>
-					<Badge size="sm" variant="light">
+					<Badge size='sm' variant='light'>
 						{entries.length}
 					</Badge>
 				</Group>
 
-				<Box style={{ flex: 1, overflowY: 'auto' }}>
-					<Stack gap="lg">
+				<Box style={{flex: 1, overflowY: 'auto'}}>
+					<Stack gap='lg'>
 						{/* EVTX Files */}
 						{evtxFiles.length > 0 && (
-							<Stack gap="xs">
-								<Group gap="xs">
-									<Text size="xs" fw={600} c="dimmed" tt="uppercase">
+							<Stack gap='xs'>
+								<Group gap='xs'>
+									<Text c='dimmed' fw={600} size='xs' tt='uppercase'>
 										EVTX Files
 									</Text>
-									<Badge size="xs" variant="light" color="blue">
+									<Badge color='blue' size='xs' variant='light'>
 										{evtxFiles.length}
 									</Badge>
 								</Group>
-								{evtxFiles.map((entry) => (
+								{evtxFiles.map(entry => (
 									<FileListItem
-										key={entry.name}
-										entry={entry}
 										active={entry.name === currentFile}
+										entry={entry}
 										isLoading={entry.name === loadingFile}
+										key={entry.name}
 										onClick={() => onFileClick(entry.name)}
 									/>
 								))}
@@ -155,21 +170,21 @@ export function ZipFileBrowser({
 
 						{/* JSON Files */}
 						{jsonFiles.length > 0 && (
-							<Stack gap="xs">
-								<Group gap="xs">
-									<Text size="xs" fw={600} c="dimmed" tt="uppercase">
+							<Stack gap='xs'>
+								<Group gap='xs'>
+									<Text c='dimmed' fw={600} size='xs' tt='uppercase'>
 										JSON Files
 									</Text>
-									<Badge size="xs" variant="light" color="green">
+									<Badge color='green' size='xs' variant='light'>
 										{jsonFiles.length}
 									</Badge>
 								</Group>
-								{jsonFiles.map((entry) => (
+								{jsonFiles.map(entry => (
 									<FileListItem
-										key={entry.name}
-										entry={entry}
 										active={entry.name === currentFile}
+										entry={entry}
 										isLoading={entry.name === loadingFile}
+										key={entry.name}
 										onClick={() => onFileClick(entry.name)}
 									/>
 								))}
@@ -178,21 +193,21 @@ export function ZipFileBrowser({
 
 						{/* XML Files */}
 						{xmlFiles.length > 0 && (
-							<Stack gap="xs">
-								<Group gap="xs">
-									<Text size="xs" fw={600} c="dimmed" tt="uppercase">
+							<Stack gap='xs'>
+								<Group gap='xs'>
+									<Text c='dimmed' fw={600} size='xs' tt='uppercase'>
 										XML Files
 									</Text>
-									<Badge size="xs" variant="light" color="orange">
+									<Badge color='orange' size='xs' variant='light'>
 										{xmlFiles.length}
 									</Badge>
 								</Group>
-								{xmlFiles.map((entry) => (
+								{xmlFiles.map(entry => (
 									<FileListItem
-										key={entry.name}
-										entry={entry}
 										active={entry.name === currentFile}
+										entry={entry}
 										isLoading={entry.name === loadingFile}
+										key={entry.name}
 										onClick={() => onFileClick(entry.name)}
 									/>
 								))}
@@ -201,21 +216,21 @@ export function ZipFileBrowser({
 
 						{/* Text Files */}
 						{txtFiles.length > 0 && (
-							<Stack gap="xs">
-								<Group gap="xs">
-									<Text size="xs" fw={600} c="dimmed" tt="uppercase">
+							<Stack gap='xs'>
+								<Group gap='xs'>
+									<Text c='dimmed' fw={600} size='xs' tt='uppercase'>
 										Text Files
 									</Text>
-									<Badge size="xs" variant="light" color="gray">
+									<Badge color='gray' size='xs' variant='light'>
 										{txtFiles.length}
 									</Badge>
 								</Group>
-								{txtFiles.map((entry) => (
+								{txtFiles.map(entry => (
 									<FileListItem
-										key={entry.name}
-										entry={entry}
 										active={entry.name === currentFile}
+										entry={entry}
 										isLoading={entry.name === loadingFile}
+										key={entry.name}
 										onClick={() => onFileClick(entry.name)}
 									/>
 								))}
@@ -224,21 +239,21 @@ export function ZipFileBrowser({
 
 						{/* Unknown Files */}
 						{unknownFiles.length > 0 && (
-							<Stack gap="xs">
-								<Group gap="xs">
-									<Text size="xs" fw={600} c="dimmed" tt="uppercase">
+							<Stack gap='xs'>
+								<Group gap='xs'>
+									<Text c='dimmed' fw={600} size='xs' tt='uppercase'>
 										Other Files
 									</Text>
-									<Badge size="xs" variant="light">
+									<Badge size='xs' variant='light'>
 										{unknownFiles.length}
 									</Badge>
 								</Group>
-								{unknownFiles.map((entry) => (
+								{unknownFiles.map(entry => (
 									<FileListItem
-										key={entry.name}
-										entry={entry}
 										active={entry.name === currentFile}
+										entry={entry}
 										isLoading={entry.name === loadingFile}
+										key={entry.name}
 										onClick={() => onFileClick(entry.name)}
 									/>
 								))}

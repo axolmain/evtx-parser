@@ -14,14 +14,14 @@ export function XmlOutput({value}: Properties) {
 
 	return (
 		<Textarea
-			ref={ref}
-			value={value}
-			placeholder='Parsed XML will appear here...'
-			readOnly
-			autosize
+			autosize={true}
+			ff='monospace'
 			minRows={15}
-			ff="monospace"
+			placeholder='Parsed XML will appear here...'
+			readOnly={true}
+			ref={ref}
 			style={{width: '100%', maxWidth: '700px'}}
+			value={value}
 		/>
 	)
 }

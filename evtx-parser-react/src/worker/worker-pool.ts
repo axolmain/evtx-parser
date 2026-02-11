@@ -3,7 +3,10 @@ import type {
 	ChunkParseSuccess,
 	WorkerResponse
 } from './protocol'
-import {isSharedArrayBufferSupported, toSharedArrayBuffer} from './shared-buffer'
+import {
+	isSharedArrayBufferSupported,
+	toSharedArrayBuffer
+} from './shared-buffer'
 
 interface PendingBatch {
 	expected: number
@@ -18,16 +21,14 @@ export class ChunkWorkerPool {
 	private batch: PendingBatch | null = null
 	private currentId = 0
 	private workers: Worker[]
-	private useSharedBuffer: boolean
+	private readonly useSharedBuffer: boolean
 
 	constructor(size: number) {
 		this.workers = []
 		this.useSharedBuffer = isSharedArrayBufferSupported()
 
 		if (this.useSharedBuffer) {
-			console.log('Worker pool: SharedArrayBuffer mode enabled')
 		} else {
-			console.log('Worker pool: Transferred ArrayBuffer mode (fallback)')
 		}
 
 		for (let i = 0; i < size; i++) {
@@ -94,7 +95,10 @@ export class ChunkWorkerPool {
 		id: number
 	): void {
 		// Calculate total size needed
-		const totalSize = chunks.reduce((sum, chunk) => sum + chunk.buffer.byteLength, 0)
+		const totalSize = chunks.reduce(
+			(sum, chunk) => sum + chunk.buffer.byteLength,
+			0
+		)
 
 		// Create one SharedArrayBuffer for all chunks
 		const combinedBuffer = new ArrayBuffer(totalSize)
@@ -109,7 +113,7 @@ export class ChunkWorkerPool {
 			combinedView.set(sourceView, currentOffset)
 			chunkMetadata.push({
 				offset: currentOffset,
-				length: chunk.buffer.byteLength,
+				length: chunk.buffer.byteLength
 			})
 			currentOffset += chunk.buffer.byteLength
 		}
@@ -130,7 +134,7 @@ export class ChunkWorkerPool {
 				chunkFileOffset: chunk.fileOffset,
 				sharedBuffer,
 				chunkOffset: metadata.offset,
-				chunkLength: metadata.length,
+				chunkLength: metadata.length
 			}
 
 			// No transferable array - SharedArrayBuffer is shared by reference
@@ -157,7 +161,7 @@ export class ChunkWorkerPool {
 				chunkFileOffset: chunk.fileOffset,
 				chunkBuffer: chunk.buffer,
 				chunkOffset: 0,
-				chunkLength: chunk.buffer.byteLength,
+				chunkLength: chunk.buffer.byteLength
 			}
 
 			// Transfer ownership of the ArrayBuffer to the worker

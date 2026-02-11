@@ -1,10 +1,10 @@
-import type { ParsedEventRecord } from '@/parser'
+import type {ParsedEventRecord} from '@/parser'
 import {
-	db,
 	type Archive,
+	db,
 	type EvtxCachedData,
 	type StoredEvent,
-	type StoredFile,
+	type StoredFile
 } from './schema'
 
 // Generate unique IDs
@@ -36,7 +36,7 @@ export async function saveArchive(
 		uploadedAt: new Date(),
 		totalSize,
 		fileCount: fileIds.length,
-		files: fileIds,
+		files: fileIds
 	}
 
 	await db.archives.add(archive)
@@ -94,7 +94,7 @@ export async function saveFile(
 		type: type as StoredFile['type'],
 		size,
 		blob,
-		parsedData,
+		parsedData
 	}
 
 	await db.files.add(file)
@@ -115,7 +115,7 @@ export async function updateFileParsedData(
 	fileId: string,
 	parsedData: EvtxCachedData | unknown
 ): Promise<void> {
-	await db.files.update(fileId, { parsedData })
+	await db.files.update(fileId, {parsedData})
 }
 
 // ============================================================================
@@ -129,7 +129,7 @@ export async function indexEvtxEvents(
 	fileName: string,
 	events: ParsedEventRecord[]
 ): Promise<void> {
-	const storedEvents: StoredEvent[] = events.map((event) => ({
+	const storedEvents: StoredEvent[] = events.map(event => ({
 		id: generateEventId(fileId, event.recordId),
 		archiveId,
 		archiveName,
@@ -147,14 +147,14 @@ export async function indexEvtxEvents(
 		task: event.task,
 		opcode: event.opcode,
 		keywords: event.keywords,
-		xml: event.xml,
+		xml: event.xml
 	}))
 
 	// Bulk add events
 	await db.events.bulkAdd(storedEvents)
 
 	// Mark file as indexed
-	await db.files.update(fileId, { indexedAt: new Date() })
+	await db.files.update(fileId, {indexedAt: new Date()})
 }
 
 export async function isFileIndexed(fileId: string): Promise<boolean> {
@@ -187,55 +187,48 @@ export async function searchEvents(
 
 	// Apply filters
 	if (filters.archiveIds && filters.archiveIds.length > 0) {
-		collection = collection.filter((e) =>
-			filters.archiveIds!.includes(e.archiveId)
-		) as any
+		const ids = filters.archiveIds
+		collection = collection.filter(e => ids.includes(e.archiveId)) as any
 	}
 
 	if (filters.fileIds && filters.fileIds.length > 0) {
-		collection = collection.filter((e) =>
-			filters.fileIds!.includes(e.fileId)
-		) as any
+		const ids = filters.fileIds
+		collection = collection.filter(e => ids.includes(e.fileId)) as any
 	}
 
 	if (filters.levels && filters.levels.length > 0) {
-		collection = collection.filter((e) =>
-			filters.levels!.includes(e.level)
-		) as any
+		const lvls = filters.levels
+		collection = collection.filter(e => lvls.includes(e.level)) as any
 	}
 
 	if (filters.eventIds && filters.eventIds.length > 0) {
-		collection = collection.filter((e) =>
-			filters.eventIds!.includes(e.eventId)
-		) as any
+		const ids = filters.eventIds
+		collection = collection.filter(e => ids.includes(e.eventId)) as any
 	}
 
 	if (filters.providers && filters.providers.length > 0) {
-		collection = collection.filter((e) =>
-			filters.providers!.some((p) =>
-				e.provider.toLowerCase().includes(p.toLowerCase())
-			)
+		const provs = filters.providers
+		collection = collection.filter(e =>
+			provs.some(p => e.provider.toLowerCase().includes(p.toLowerCase()))
 		) as any
 	}
 
 	if (filters.computers && filters.computers.length > 0) {
-		collection = collection.filter((e) =>
-			filters.computers!.some((c) =>
-				e.computer.toLowerCase().includes(c.toLowerCase())
-			)
+		const comps = filters.computers
+		collection = collection.filter(e =>
+			comps.some(c => e.computer.toLowerCase().includes(c.toLowerCase()))
 		) as any
 	}
 
 	if (filters.channels && filters.channels.length > 0) {
-		collection = collection.filter((e) =>
-			filters.channels!.includes(e.channel)
-		) as any
+		const chans = filters.channels
+		collection = collection.filter(e => chans.includes(e.channel)) as any
 	}
 
 	if (filters.query) {
 		const query = filters.query.toLowerCase()
 		collection = collection.filter(
-			(e) =>
+			e =>
 				e.eventData.toLowerCase().includes(query) ||
 				e.provider.toLowerCase().includes(query) ||
 				e.eventId.toLowerCase().includes(query) ||
@@ -245,13 +238,13 @@ export async function searchEvents(
 
 	if (filters.startDate) {
 		collection = collection.filter(
-			(e) => new Date(e.timestamp) >= filters.startDate!
+			e => new Date(e.timestamp) >= filters.startDate!
 		) as any
 	}
 
 	if (filters.endDate) {
 		collection = collection.filter(
-			(e) => new Date(e.timestamp) <= filters.endDate!
+			e => new Date(e.timestamp) <= filters.endDate!
 		) as any
 	}
 
@@ -259,9 +252,7 @@ export async function searchEvents(
 }
 
 // Get unique values for filter dropdowns
-export async function getEventFilterOptions(
-	archiveId?: string
-): Promise<{
+export async function getEventFilterOptions(archiveId?: string): Promise<{
 	eventIds: string[]
 	providers: string[]
 	computers: string[]
@@ -275,12 +266,12 @@ export async function getEventFilterOptions(
 
 	const events = await query.toArray()
 
-	const eventIds = [...new Set(events.map((e) => e.eventId))].sort()
-	const providers = [...new Set(events.map((e) => e.provider))].sort()
-	const computers = [...new Set(events.map((e) => e.computer))].sort()
-	const channels = [...new Set(events.map((e) => e.channel))].sort()
+	const eventIds = [...new Set(events.map(e => e.eventId))].sort()
+	const providers = [...new Set(events.map(e => e.provider))].sort()
+	const computers = [...new Set(events.map(e => e.computer))].sort()
+	const channels = [...new Set(events.map(e => e.channel))].sort()
 
-	return { eventIds, providers, computers, channels }
+	return {eventIds, providers, computers, channels}
 }
 
 // Get event count by level (for statistics)

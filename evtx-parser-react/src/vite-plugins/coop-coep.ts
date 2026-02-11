@@ -1,4 +1,4 @@
-import type { Plugin } from 'vite'
+import type {Plugin} from 'vite'
 
 /**
  * Vite plugin that injects Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy
@@ -26,6 +26,6 @@ export function coopCoepPlugin(): Plugin {
 				res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp')
 				next()
 			})
-		},
+		}
 	}
 }

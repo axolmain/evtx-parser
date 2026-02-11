@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
-import { Button, Group, Notification } from '@mantine/core'
-import { useRegisterSW } from 'virtual:pwa-register/react'
+import {useRegisterSW} from 'virtual:pwa-register/react'
+import {Button, Group, Notification} from '@mantine/core'
+import {useEffect, useState} from 'react'
 
 export function PWAPrompt() {
 	const [showInstallPrompt, setShowInstallPrompt] = useState(false)
@@ -8,14 +8,10 @@ export function PWAPrompt() {
 	const {
 		offlineReady: [offlineReady, setOfflineReady],
 		needRefresh: [needRefresh, setNeedRefresh],
-		updateServiceWorker,
+		updateServiceWorker
 	} = useRegisterSW({
-		onRegistered(r) {
-			console.log('SW Registered:', r)
-		},
-		onRegisterError(error) {
-			console.log('SW registration error', error)
-		},
+		onRegistered(_r) {},
+		onRegisterError(_error) {}
 	})
 
 	const close = () => {
@@ -30,18 +26,20 @@ export function PWAPrompt() {
 		}
 	}, [offlineReady])
 
-	if (!offlineReady && !needRefresh) {
+	if (!(offlineReady || needRefresh)) {
 		return null
 	}
 
 	return (
-		<div style={{ position: 'fixed', bottom: '1rem', right: '1rem', zIndex: 9999 }}>
+		<div
+			style={{position: 'fixed', bottom: '1rem', right: '1rem', zIndex: 9999}}
+		>
 			{offlineReady && showInstallPrompt && (
 				<Notification
-					title="App ready for offline use"
-					color="green"
+					color='green'
 					onClose={close}
-					withCloseButton
+					title='App ready for offline use'
+					withCloseButton={true}
 				>
 					The app is now cached and ready to work offline!
 				</Notification>
@@ -49,16 +47,16 @@ export function PWAPrompt() {
 
 			{needRefresh && (
 				<Notification
-					title="Update available"
-					color="blue"
+					color='blue'
 					onClose={close}
-					withCloseButton
+					title='Update available'
+					withCloseButton={true}
 				>
-					<Group gap="xs" mt="sm">
-						<Button size="xs" onClick={() => updateServiceWorker(true)}>
+					<Group gap='xs' mt='sm'>
+						<Button onClick={() => updateServiceWorker(true)} size='xs'>
 							Update now
 						</Button>
-						<Button size="xs" variant="subtle" onClick={close}>
+						<Button onClick={close} size='xs' variant='subtle'>
 							Later
 						</Button>
 					</Group>

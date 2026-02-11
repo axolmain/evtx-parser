@@ -26,7 +26,7 @@ export function ControlBar({
 	tplStats
 }: Properties) {
 	return (
-		<Group gap="sm" style={{width: '100%', maxWidth: '700px'}}>
+		<Group gap='sm' style={{width: '100%', maxWidth: '700px'}}>
 			<CopyButton disabled={disabled} text={xml} />
 			<DownloadButton disabled={disabled} fileName={fileName} text={xml} />
 			<StatsDisplay

@@ -2,7 +2,6 @@ import {parseBinXmlDocument} from './binxml'
 import {HEX} from './constants'
 // import {formatChunkHeaderComment, formatRecordComment} from './format'
 import {formatGuid} from './helpers'
-import {parseEventXml} from './xml-helper'
 import type {
 	ChunkHeader,
 	EvtxParseResult,
@@ -12,6 +11,7 @@ import type {
 	ParsedEventRecord,
 	TemplateStats
 } from './types'
+import {parseEventXml} from './xml-helper'
 
 const LEVEL_NAMES: Record<number, string> = {
 	1: 'Critical',
@@ -21,7 +21,9 @@ const LEVEL_NAMES: Record<number, string> = {
 	5: 'Verbose'
 }
 
-function extractEventFields(xmlString: string): Omit<ParsedEventRecord, 'recordId' | 'timestamp' | 'xml' | 'chunkIndex'> {
+function extractEventFields(
+	xmlString: string
+): Omit<ParsedEventRecord, 'recordId' | 'timestamp' | 'xml' | 'chunkIndex'> {
 	const parsed = parseEventXml(xmlString)
 
 	return {

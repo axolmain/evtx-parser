@@ -6,8 +6,13 @@ import {
 } from '@/parser/evtx'
 import {formatChunkHeaderComment, formatRecordComment} from '@/parser/format'
 import {hex32} from '@/parser/helpers'
+import type {
+	ChunkHeader,
+	EvtxRecord,
+	ParsedEventRecord,
+	TemplateStats
+} from '@/parser/types'
 import {parseEventXml} from '@/parser/xml-helper'
-import type {ChunkHeader, EvtxRecord, ParsedEventRecord, TemplateStats} from '@/parser/types'
 import type {
 	ChunkParseError,
 	ChunkParseRequest,
@@ -22,7 +27,9 @@ const LEVEL_NAMES: Record<number, string> = {
 	5: 'Verbose'
 }
 
-function extractEventFields(xmlString: string): Omit<ParsedEventRecord, 'recordId' | 'timestamp' | 'xml' | 'chunkIndex'> {
+function extractEventFields(
+	xmlString: string
+): Omit<ParsedEventRecord, 'recordId' | 'timestamp' | 'xml' | 'chunkIndex'> {
 	const parsed = parseEventXml(xmlString)
 
 	return {
@@ -54,7 +61,15 @@ function adjustRecord(r: EvtxRecord, fileOffset: number): EvtxRecord {
 function handleChunk(
 	msg: ChunkParseRequest
 ): ChunkParseError | ChunkParseSuccess {
-	const {chunkFileOffset, chunkIndex, id, sharedBuffer, chunkBuffer, chunkOffset, chunkLength} = msg
+	const {
+		chunkFileOffset,
+		chunkIndex,
+		id,
+		sharedBuffer,
+		chunkBuffer,
+		chunkOffset,
+		chunkLength
+	} = msg
 
 	try {
 		// Determine buffer mode and create appropriate DataView
@@ -73,7 +88,9 @@ function handleChunk(
 			dv = new DataView(chunkBuffer, 0, chunkLength)
 			chunkStart = 0
 		} else {
-			throw new Error('No buffer provided (neither sharedBuffer nor chunkBuffer)')
+			throw new Error(
+				'No buffer provided (neither sharedBuffer nor chunkBuffer)'
+			)
 		}
 
 		const tplStats: TemplateStats = {

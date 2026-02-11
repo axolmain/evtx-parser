@@ -8,9 +8,9 @@ import {
 	Stack,
 	Text,
 	TextInput,
-	Tooltip,
+	Tooltip
 } from '@mantine/core'
-import { IconFilter, IconFilterOff, IconSearch, IconX } from '@tabler/icons-react'
+import {IconFilter, IconFilterOff, IconSearch, IconX} from '@tabler/icons-react'
 import {useState} from 'react'
 
 interface Properties {
@@ -56,48 +56,48 @@ export function EventFilters({
 	}
 
 	return (
-		<Group gap="sm">
+		<Group gap='sm'>
 			<Popover
-				opened={searchHintOpened}
 				onChange={setSearchHintOpened}
+				opened={searchHintOpened}
+				position='bottom-start'
 				width={280}
-				position="bottom-start"
 			>
 				<Popover.Target>
 					<TextInput
-						placeholder="Search events..."
 						leftSection={<IconSearch size={16} />}
-						value={searchQuery}
-						onChange={(e) => onSearchChange(e.currentTarget.value)}
-						onFocus={() => setSearchHintOpened(true)}
 						onBlur={() => setTimeout(() => setSearchHintOpened(false), 200)}
+						onChange={e => onSearchChange(e.currentTarget.value)}
+						onFocus={() => setSearchHintOpened(true)}
+						placeholder='Search events...'
 						rightSection={
 							searchQuery && (
 								<ActionIcon
-									size="sm"
-									variant="transparent"
 									onClick={() => onSearchChange('')}
+									size='sm'
+									variant='transparent'
 								>
 									<IconX size={14} />
 								</ActionIcon>
 							)
 						}
-						style={{ minWidth: '320px' }}
+						style={{minWidth: '320px'}}
+						value={searchQuery}
 					/>
 				</Popover.Target>
 				<Popover.Dropdown>
-					<Stack gap="xs">
-						<Text size="xs" fw={600} c="dimmed">
+					<Stack gap='xs'>
+						<Text c='dimmed' fw={600} size='xs'>
 							Search Tips
 						</Text>
-						<Text size="xs">
+						<Text size='xs'>
 							• Search across event data, provider, event ID, computer, and
 							channel
 						</Text>
-						<Text size="xs">• Search is case-insensitive</Text>
-						<Text size="xs">
+						<Text size='xs'>• Search is case-insensitive</Text>
+						<Text size='xs'>
 							• For global search across all archives, press{' '}
-							<Badge size="xs" variant="light">
+							<Badge size='xs' variant='light'>
 								⌘K
 							</Badge>
 						</Text>
@@ -105,34 +105,39 @@ export function EventFilters({
 				</Popover.Dropdown>
 			</Popover>
 
-			<Popover opened={filterOpened} onChange={setFilterOpened} width={250} position="bottom-start">
+			<Popover
+				onChange={setFilterOpened}
+				opened={filterOpened}
+				position='bottom-start'
+				width={250}
+			>
 				<Popover.Target>
 					<Button
-						variant="default"
 						leftSection={<IconFilter size={16} />}
 						onClick={() => setFilterOpened(o => !o)}
 						rightSection={
 							activeFilterCount > 0 ? (
-								<Badge size="sm" color="blue" circle>
+								<Badge circle={true} color='blue' size='sm'>
 									{activeFilterCount}
 								</Badge>
 							) : null
 						}
+						variant='default'
 					>
 						Filter Levels
 					</Button>
 				</Popover.Target>
 				<Popover.Dropdown>
-					<Stack gap="xs">
-						<Group justify="space-between">
-							<Text size="xs" fw={600} c="dimmed">
+					<Stack gap='xs'>
+						<Group justify='space-between'>
+							<Text c='dimmed' fw={600} size='xs'>
 								Event Levels
 							</Text>
 							{activeFilterCount > 0 && (
 								<Button
-									size="xs"
-									variant="subtle"
 									onClick={() => onLevelsChange([1, 2, 3, 4, 5])}
+									size='xs'
+									variant='subtle'
 								>
 									Select All
 								</Button>
@@ -143,16 +148,16 @@ export function EventFilters({
 							const count = levelCounts[levelNum] || 0
 							return (
 								<Checkbox
+									checked={selectedLevels.includes(levelNum)}
 									key={level}
 									label={
-										<Group gap="xs" wrap="nowrap">
+										<Group gap='xs' wrap='nowrap'>
 											<span>{info.name}</span>
-											<Badge size="xs" color={info.color}>
+											<Badge color={info.color} size='xs'>
 												{count}
 											</Badge>
 										</Group>
 									}
-									checked={selectedLevels.includes(levelNum)}
 									onChange={() => toggleLevel(levelNum)}
 								/>
 							)
@@ -162,12 +167,8 @@ export function EventFilters({
 			</Popover>
 
 			{hasActiveFilters && (
-				<Tooltip label="Clear all filters">
-					<ActionIcon
-						variant="subtle"
-						color="gray"
-						onClick={clearAllFilters}
-					>
+				<Tooltip label='Clear all filters'>
+					<ActionIcon color='gray' onClick={clearAllFilters} variant='subtle'>
 						<IconFilterOff size={18} />
 					</ActionIcon>
 				</Tooltip>
