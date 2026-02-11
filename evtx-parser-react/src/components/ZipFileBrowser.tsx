@@ -1,13 +1,15 @@
 import {
 	Badge,
 	Box,
+	Divider,
 	Group,
 	Loader,
 	Paper,
+	ScrollArea,
 	Stack,
 	Text,
 	Title,
-	Tooltip
+	Tooltip,
 } from '@mantine/core'
 import {
 	IconFileText,
@@ -123,27 +125,16 @@ export function ZipFileBrowser({
 	const unknownFiles: FileEntry[] = entries.filter(e => e.type === 'unknown')
 
 	return (
-		<Paper
-			h='calc(100vh - 4rem)'
-			p='md'
-			style={{
-				display: 'flex',
-				flexDirection: 'column',
-				position: 'sticky',
-				top: '2rem'
-			}}
-			w={300}
-			withBorder={true}
-		>
-			<Stack gap='md' style={{flex: 1, overflow: 'hidden'}}>
-				<Group justify='space-between'>
-					<Title order={4}>Files</Title>
-					<Badge size='sm' variant='light'>
-						{entries.length}
-					</Badge>
-				</Group>
+		<Stack gap="md" style={{height: '100%'}}>
+			<Group justify="space-between">
+				<Title order={5}>Files</Title>
+				<Badge size="sm" variant="light">
+					{entries.length}
+				</Badge>
+			</Group>
+			<Divider />
 
-				<Box style={{flex: 1, overflowY: 'auto'}}>
+			<ScrollArea style={{flex: 1}}>
 					<Stack gap='lg'>
 						{/* EVTX Files */}
 						{evtxFiles.length > 0 && (
@@ -260,8 +251,7 @@ export function ZipFileBrowser({
 							</Stack>
 						)}
 					</Stack>
-				</Box>
-			</Stack>
-		</Paper>
+			</ScrollArea>
+		</Stack>
 	)
 }

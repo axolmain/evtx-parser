@@ -2,6 +2,7 @@ import {Center, MantineProvider, Text} from '@mantine/core'
 import {RouterProvider} from '@tanstack/react-router'
 import {ErrorBoundary, type FallbackProps} from 'react-error-boundary'
 import {CacheProvider} from '@/contexts/CacheContext'
+import {NavbarProvider} from '@/contexts/NavbarContext'
 import {StandaloneFileProvider} from '@/contexts/StandaloneFileContext'
 import {router} from '@/router'
 import '@mantine/core/styles.css'
@@ -26,7 +27,9 @@ export function App() {
 			<ErrorBoundary fallbackRender={renderError}>
 				<CacheProvider>
 					<StandaloneFileProvider>
-						<RouterProvider router={router} />
+						<NavbarProvider>
+							<RouterProvider router={router} />
+						</NavbarProvider>
 					</StandaloneFileProvider>
 				</CacheProvider>
 			</ErrorBoundary>

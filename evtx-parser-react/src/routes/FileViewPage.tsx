@@ -5,6 +5,7 @@ import {EvtxViewer} from '@/components/EvtxViewer'
 import {JsonViewer} from '@/components/JsonViewer'
 import {TextViewer} from '@/components/TextViewer'
 import type {EvtxCacheData} from '@/contexts/CacheContext'
+import {useNavbar} from '@/contexts/NavbarContext'
 import {useFileLoader, type LoaderOptions} from '@/hooks/useFileLoader'
 import {detectFileType} from '@/lib/fileTypes'
 import type {FileSearchParams} from '@/router'
@@ -30,16 +31,17 @@ export function FileViewPage() {
 		fileName: string
 	}
 	const searchParams = useSearch({strict: false}) as FileSearchParams
+	const {progressiveMode} = useNavbar()
 
 	const decodedFileName = decodeURIComponent(fileName)
 	const fileType = detectFileType(decodedFileName)
 
 	// Extract optimization hints from URL
 	const loaderOptions: LoaderOptions = {
-		progressive: searchParams.progressive,
+		progressive: progressiveMode, // Use context instead of URL param
 		fieldsToExtract: searchParams.fieldsToExtract
 			? JSON.parse(searchParams.fieldsToExtract)
-			: undefined
+			: undefined,
 	}
 
 	const {data, isLoading, error, progress} = useFileLoader(

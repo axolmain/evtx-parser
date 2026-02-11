@@ -39,6 +39,8 @@ export function useFileLoader(
 	const load = useCallback(async () => {
 		setIsLoading(true)
 		setError(null)
+		setData(null) // Clear old data when switching files
+		setProgress(null) // Clear old progress state
 
 		try {
 			// Check memory cache first
