@@ -32,13 +32,15 @@ const archiveIndexRoute = createRoute({
 	component: ArchiveIndex
 })
 
-interface FileSearchParams {
+export interface FileSearchParams {
 	view?: string
 	search?: string
 	levels?: string
 	event?: number
 	page?: number
 	pageSize?: number
+	progressive?: boolean
+	fieldsToExtract?: string
 }
 
 const fileRoute = createRoute({
@@ -52,7 +54,12 @@ const fileRoute = createRoute({
 		if (search['levels'] !== undefined) params.levels = String(search['levels'])
 		if (search['event'] !== undefined) params.event = Number(search['event'])
 		if (search['page'] !== undefined) params.page = Number(search['page'])
-		if (search['pageSize'] !== undefined) params.pageSize = Number(search['pageSize'])
+		if (search['pageSize'] !== undefined)
+			params.pageSize = Number(search['pageSize'])
+		if (search['progressive'] !== undefined)
+			params.progressive = search['progressive'] === 'true'
+		if (search['fieldsToExtract'] !== undefined)
+			params.fieldsToExtract = String(search['fieldsToExtract'])
 		return params
 	}
 })

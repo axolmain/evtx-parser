@@ -2,20 +2,31 @@ import {useCallback, useEffect, useState} from 'react'
 import type {EvtxCacheData} from '@/contexts/CacheContext'
 import {useCache} from '@/contexts/CacheContext'
 import * as dbService from '@/db/service'
-import {parseBuffer} from '@/hooks/useEvtxParserHelpers'
+import {
+	parseBuffer,
+	parseBufferStreaming,
+	type StreamingProgress
+} from '@/hooks/useEvtxParserHelpers'
 import type {FileType} from '@/lib/fileTypes'
+
+export interface LoaderOptions {
+	progressive?: boolean
+	fieldsToExtract?: string[]
+}
 
 interface FileLoaderResult {
 	data: EvtxCacheData | unknown | string | null
 	isLoading: boolean
 	error: string | null
 	reload: () => void
+	progress: StreamingProgress | null
 }
 
 export function useFileLoader(
 	archiveId: string,
 	fileName: string,
-	fileType: FileType
+	fileType: FileType,
+	options?: LoaderOptions
 ): FileLoaderResult {
 	const {getCachedContent, setCachedContent, getPool} = useCache()
 	const [data, setData] = useState<EvtxCacheData | unknown | string | null>(
@@ -23,6 +34,7 @@ export function useFileLoader(
 	)
 	const [isLoading, setIsLoading] = useState(true)
 	const [error, setError] = useState<string | null>(null)
+	const [progress, setProgress] = useState<StreamingProgress | null>(null)
 
 	const load = useCallback(async () => {
 		setIsLoading(true)
@@ -54,34 +66,114 @@ export function useFileLoader(
 					if (!storedFile) throw new Error('File not found in database')
 
 					const buffer = await storedFile.blob.arrayBuffer()
-					const {result, parseTime} = await parseBuffer(buffer, getPool())
+					const pool = getPool()
 
-					const evtxData: EvtxCacheData = {
-						result,
-						fileSize: buffer.byteLength,
-						parseTime,
-						fileName: fileName.replace(/\.evtx$/i, '')
+					// Progressive parsing mode
+					if (options?.progressive && pool) {
+						// Load cached chunks from IndexedDB
+						const cachedChunks = await dbService.loadCachedChunks(fileId)
+
+						const {result, parseTime} = await parseBufferStreaming(
+							buffer,
+							pool,
+							progressUpdate => {
+								setProgress(progressUpdate)
+
+								// Cache newly parsed chunk (non-blocking)
+								if (progressUpdate.chunkResult) {
+									dbService
+										.cacheChunk(
+											fileId,
+											progressUpdate.chunkResult.chunkIndex,
+											progressUpdate.chunkResult
+										)
+										.catch(_err => {
+											// Non-blocking - ignore cache errors
+										})
+								}
+
+								// Update display data with progressive records
+								if (progressUpdate.displayRecords.length > 0) {
+									// Note: We can't reference 'result' here yet as it's not available
+									// Create a partial result for display
+									const partialData: EvtxCacheData = {
+										result: {
+											numChunks: progressUpdate.totalChunks,
+											recordOutputs: [],
+											records: progressUpdate.displayRecords,
+											summary: `Parsing... ${progressUpdate.parsedChunks}/${progressUpdate.totalChunks} chunks`,
+											totalRecords: progressUpdate.actualRecords,
+											tplStats: {
+												currentRecordId: 0,
+												defsByOffset: {},
+												definitionCount: 0,
+												definitions: {},
+												missingCount: 0,
+												missingRefs: [],
+												parseErrors: [],
+												referenceCount: 0,
+												references: []
+											},
+											warnings: [],
+											xml: ''
+										},
+										fileSize: buffer.byteLength,
+										parseTime: 0,
+										fileName: fileName.replace(/\.evtx$/i, '')
+									}
+									setData(partialData)
+									setIsLoading(!progressUpdate.isComplete)
+								}
+							},
+							cachedChunks
+						)
+
+						const evtxData: EvtxCacheData = {
+							result,
+							fileSize: buffer.byteLength,
+							parseTime,
+							fileName: fileName.replace(/\.evtx$/i, '')
+						}
+
+						setCachedContent(archiveId, fileName, 'evtx', evtxData)
+						await dbService.updateFileParsedData(fileId, evtxData)
+
+						setData(evtxData)
+					} else {
+						// Standard batch parsing
+						const {result, parseTime} = await parseBuffer(buffer, pool)
+
+						const evtxData: EvtxCacheData = {
+							result,
+							fileSize: buffer.byteLength,
+							parseTime,
+							fileName: fileName.replace(/\.evtx$/i, '')
+						}
+
+						setCachedContent(archiveId, fileName, 'evtx', evtxData)
+						await dbService.updateFileParsedData(fileId, evtxData)
+
+						setData(evtxData)
 					}
-
-					setCachedContent(archiveId, fileName, 'evtx', evtxData)
-					await dbService.updateFileParsedData(fileId, evtxData)
 
 					// Index events in background
 					const isIndexed = await dbService.isFileIndexed(fileId)
 					if (!isIndexed) {
 						const archive = await dbService.getArchive(archiveId)
-						dbService
-							.indexEvtxEvents(
-								fileId,
-								archiveId,
-								archive?.name ?? '',
-								fileName,
-								result.records
-							)
-							.catch(_err => {})
+						const finalData = data as EvtxCacheData
+						if (finalData?.result) {
+							dbService
+								.indexEvtxEvents(
+									fileId,
+									archiveId,
+									archive?.name ?? '',
+									fileName,
+									finalData.result.records
+								)
+								.catch(_err => {})
+						}
 					}
 
-					setData(evtxData)
 					break
 				}
 
@@ -153,5 +245,5 @@ export function useFileLoader(
 		load()
 	}, [load])
 
-	return {data, isLoading, error, reload: load}
+	return {data, isLoading, error, reload: load, progress}
 }

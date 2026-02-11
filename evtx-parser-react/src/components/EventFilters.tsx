@@ -19,6 +19,7 @@ interface Properties {
 	selectedLevels: number[]
 	onLevelsChange: (levels: number[]) => void
 	levelCounts: Record<number, number>
+	disabled?: boolean
 }
 
 const LEVEL_INFO = {
@@ -34,7 +35,8 @@ export function EventFilters({
 	onSearchChange,
 	selectedLevels,
 	onLevelsChange,
-	levelCounts
+	levelCounts,
+	disabled = false
 }: Properties) {
 	const [filterOpened, setFilterOpened] = useState(false)
 	const [searchHintOpened, setSearchHintOpened] = useState(false)
@@ -59,12 +61,13 @@ export function EventFilters({
 		<Group gap='sm'>
 			<Popover
 				onChange={setSearchHintOpened}
-				opened={searchHintOpened}
+				opened={searchHintOpened && !disabled}
 				position='bottom-start'
 				width={280}
 			>
 				<Popover.Target>
 					<TextInput
+						disabled={disabled}
 						leftSection={<IconSearch size={16} />}
 						onBlur={() => setTimeout(() => setSearchHintOpened(false), 200)}
 						onChange={e => onSearchChange(e.currentTarget.value)}
@@ -73,6 +76,7 @@ export function EventFilters({
 						rightSection={
 							searchQuery && (
 								<ActionIcon
+									disabled={disabled}
 									onClick={() => onSearchChange('')}
 									size='sm'
 									variant='transparent'
@@ -107,12 +111,13 @@ export function EventFilters({
 
 			<Popover
 				onChange={setFilterOpened}
-				opened={filterOpened}
+				opened={filterOpened && !disabled}
 				position='bottom-start'
 				width={250}
 			>
 				<Popover.Target>
 					<Button
+						disabled={disabled}
 						leftSection={<IconFilter size={16} />}
 						onClick={() => setFilterOpened(o => !o)}
 						rightSection={

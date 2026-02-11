@@ -5,8 +5,9 @@ import {EvtxViewer} from '@/components/EvtxViewer'
 import {JsonViewer} from '@/components/JsonViewer'
 import {TextViewer} from '@/components/TextViewer'
 import type {EvtxCacheData} from '@/contexts/CacheContext'
-import {useFileLoader} from '@/hooks/useFileLoader'
+import {useFileLoader, type LoaderOptions} from '@/hooks/useFileLoader'
 import {detectFileType} from '@/lib/fileTypes'
+import type {FileSearchParams} from '@/router'
 
 function UnsupportedFileViewer({fileName}: {fileName: string}) {
 	return (
@@ -28,19 +29,29 @@ export function FileViewPage() {
 		archiveId: string
 		fileName: string
 	}
-	const search = useSearch({strict: false}) as {
-		event?: number
-	}
+	const searchParams = useSearch({strict: false}) as FileSearchParams
 
 	const decodedFileName = decodeURIComponent(fileName)
 	const fileType = detectFileType(decodedFileName)
-	const {data, isLoading, error} = useFileLoader(
+
+	// Extract optimization hints from URL
+	const loaderOptions: LoaderOptions = {
+		progressive: searchParams.progressive,
+		fieldsToExtract: searchParams.fieldsToExtract
+			? JSON.parse(searchParams.fieldsToExtract)
+			: undefined
+	}
+
+	const {data, isLoading, error, progress} = useFileLoader(
 		archiveId,
 		decodedFileName,
-		fileType
+		fileType,
+		loaderOptions
 	)
 
-	if (isLoading) {
+	// Show loading screen only if we don't have any data yet
+	// (progressive mode will show partial data while still loading)
+	if (isLoading && !data) {
 		return (
 			<Box p='4rem'>
 				<Stack align='center' gap='md'>
@@ -73,7 +84,9 @@ export function FileViewPage() {
 					fileSize={evtxData.fileSize}
 					parsedResult={evtxData.result}
 					parseTime={evtxData.parseTime}
-					selectedRecordId={search.event ?? null}
+					selectedRecordId={searchParams.event ?? null}
+					isLoadingMore={isLoading && progress !== null}
+					parseProgress={progress}
 				/>
 			)
 		}

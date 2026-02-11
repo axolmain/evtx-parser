@@ -17,8 +17,26 @@ interface PendingBatch {
 	settled: number
 }
 
+interface StreamingBatch {
+	expected: number
+	id: number
+	onChunkComplete: (
+		result: ChunkParseSuccess,
+		progress: {
+			parsedChunks: number
+			totalChunks: number
+			actualRecords: number
+		}
+	) => void
+	reject: (reason: Error) => void
+	resolve: () => void
+	settled: number
+	totalRecords: number
+}
+
 export class ChunkWorkerPool {
 	private batch: PendingBatch | null = null
+	private streamingBatch: StreamingBatch | null = null
 	private currentId = 0
 	private workers: Worker[]
 	private readonly useSharedBuffer: boolean
@@ -82,6 +100,59 @@ export class ChunkWorkerPool {
 			} else {
 				// Fallback mode: Transfer ArrayBuffers to workers
 				this.parseChunksTransfer(chunks, id)
+			}
+		})
+	}
+
+	/**
+	 * Parse chunks in streaming mode - calls onChunkComplete as each chunk finishes.
+	 * Priority chunks are parsed first (e.g., first 3 chunks for immediate display).
+	 */
+	parseChunksStreaming(
+		chunks: {buffer: ArrayBuffer; fileOffset: number; index: number}[],
+		onChunkComplete: (
+			result: ChunkParseSuccess,
+			progress: {
+				parsedChunks: number
+				totalChunks: number
+				actualRecords: number
+			}
+		) => void,
+		priorityIndexes?: number[]
+	): Promise<void> {
+		// Cancel any existing batch
+		this.cancelPending()
+
+		const id = ++this.currentId
+
+		return new Promise<void>((resolve, reject) => {
+			if (chunks.length === 0) {
+				resolve()
+				return
+			}
+
+			this.streamingBatch = {
+				id,
+				expected: chunks.length,
+				settled: 0,
+				totalRecords: 0,
+				onChunkComplete,
+				resolve,
+				reject
+			}
+
+			// Sort chunks into priority and non-priority
+			const prioritySet = new Set(priorityIndexes || [])
+			const priorityChunks = chunks.filter(c => prioritySet.has(c.index))
+			const regularChunks = chunks.filter(c => !prioritySet.has(c.index))
+
+			// Parse priority chunks first, then regular chunks
+			const orderedChunks = [...priorityChunks, ...regularChunks]
+
+			if (this.useSharedBuffer) {
+				this.parseChunksShared(orderedChunks, id)
+			} else {
+				this.parseChunksTransfer(orderedChunks, id)
 			}
 		})
 	}
@@ -186,26 +257,59 @@ export class ChunkWorkerPool {
 			this.batch.reject(new Error('Cancelled'))
 			this.batch = null
 		}
+		if (this.streamingBatch) {
+			this.streamingBatch.reject(new Error('Cancelled'))
+			this.streamingBatch = null
+		}
 	}
 
 	private handleResponse(resp: WorkerResponse): void {
+		// Handle batch mode
 		const batch = this.batch
-		if (!batch || resp.id !== batch.id) return // stale
+		if (batch && resp.id === batch.id) {
+			if (resp.type === 'chunk-error') {
+				this.batch = null
+				batch.reject(new Error(`Chunk ${resp.chunkIndex}: ${resp.error}`))
+				return
+			}
 
-		if (resp.type === 'chunk-error') {
-			this.batch = null
-			batch.reject(new Error(`Chunk ${resp.chunkIndex}: ${resp.error}`))
+			batch.results.push(resp)
+			batch.settled++
+
+			if (batch.settled === batch.expected) {
+				this.batch = null
+				// Sort by chunkIndex to maintain order
+				batch.results.sort((a, b) => a.chunkIndex - b.chunkIndex)
+				batch.resolve(batch.results)
+			}
 			return
 		}
 
-		batch.results.push(resp)
-		batch.settled++
+		// Handle streaming mode
+		const streamingBatch = this.streamingBatch
+		if (streamingBatch && resp.id === streamingBatch.id) {
+			if (resp.type === 'chunk-error') {
+				this.streamingBatch = null
+				streamingBatch.reject(
+					new Error(`Chunk ${resp.chunkIndex}: ${resp.error}`)
+				)
+				return
+			}
 
-		if (batch.settled === batch.expected) {
-			this.batch = null
-			// Sort by chunkIndex to maintain order
-			batch.results.sort((a, b) => a.chunkIndex - b.chunkIndex)
-			batch.resolve(batch.results)
+			streamingBatch.settled++
+			streamingBatch.totalRecords += resp.recordCount
+
+			// Call progress callback immediately
+			streamingBatch.onChunkComplete(resp, {
+				parsedChunks: streamingBatch.settled,
+				totalChunks: streamingBatch.expected,
+				actualRecords: streamingBatch.totalRecords
+			})
+
+			if (streamingBatch.settled === streamingBatch.expected) {
+				this.streamingBatch = null
+				streamingBatch.resolve()
+			}
 		}
 	}
 

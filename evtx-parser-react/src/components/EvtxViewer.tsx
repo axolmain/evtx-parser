@@ -1,7 +1,8 @@
-import {Button, Divider, Group, Stack, Text} from '@mantine/core'
-import {IconLayoutList, IconTable} from '@tabler/icons-react'
+import {Alert, Button, Divider, Group, Stack, Text} from '@mantine/core'
+import {IconInfoCircle, IconLayoutList, IconTable} from '@tabler/icons-react'
 import {useEffect, useMemo, useState} from 'react'
 import {useEvtxParser} from '@/hooks/useEvtxParser'
+import type {StreamingProgress} from '@/hooks/useEvtxParserHelpers'
 import {usePagination} from '@/hooks/usePagination'
 import type {EvtxParseResult} from '@/parser'
 import {CopyButton} from './CopyButton'
@@ -24,6 +25,8 @@ interface EvtxViewerProps {
 	parseTime?: number
 	onParseComplete?: (result: EvtxParseResult, fileName: string) => void
 	selectedRecordId: number | null
+	isLoadingMore?: boolean
+	parseProgress?: StreamingProgress | null
 }
 
 type StatusType = 'error' | 'info' | 'success'
@@ -72,7 +75,9 @@ export function EvtxViewer({
 	fileSize: propFileSize,
 	parseTime: propParseTime,
 	onParseComplete,
-	selectedRecordId
+	selectedRecordId,
+	isLoadingMore = false,
+	parseProgress = null
 }: EvtxViewerProps) {
 	const {state, parseFile} = useEvtxParser()
 	const [viewMode, setViewMode] = useState<ViewMode>('viewer')
@@ -169,11 +174,26 @@ export function EvtxViewer({
 					{/* Summary Bar */}
 					<EventSummary records={effectiveState.result.records} />
 
+					{/* Progressive Loading Indicator */}
+					{isLoadingMore && parseProgress && (
+						<Alert
+							color='blue'
+							icon={<IconInfoCircle />}
+							style={{width: '100%'}}
+							title='Loading more chunks...'
+						>
+							Parsed {parseProgress.parsedChunks}/{parseProgress.totalChunks}{' '}
+							chunks ({parseProgress.actualRecords} records so far). Search and
+							filters will be available when complete.
+						</Alert>
+					)}
+
 					<Divider style={{width: '100%'}} />
 
 					{/* Search and Filters */}
 					<Group justify='space-between' style={{width: '100%'}}>
 						<EventFilters
+							disabled={isLoadingMore}
 							levelCounts={levelCounts}
 							onLevelsChange={setSelectedLevels}
 							onSearchChange={setSearchQuery}
