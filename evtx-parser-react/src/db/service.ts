@@ -131,6 +131,8 @@ export async function updateFileParsedData(
 // Event Operations (for EVTX search)
 // ============================================================================
 
+const INDEX_BATCH_SIZE = 2000
+
 export async function indexEvtxEvents(
 	fileId: string,
 	archiveId: string,
@@ -159,8 +161,15 @@ export async function indexEvtxEvents(
 		xml: event.xml
 	}))
 
-	// Bulk add events
-	await db.events.bulkAdd(storedEvents)
+	// Batch writes with yields so IndexedDB reads can interleave
+	for (let i = 0; i < storedEvents.length; i += INDEX_BATCH_SIZE) {
+		const batch = storedEvents.slice(i, i + INDEX_BATCH_SIZE)
+		await db.events.bulkAdd(batch)
+		// Yield to the event loop between batches
+		if (i + INDEX_BATCH_SIZE < storedEvents.length) {
+			await new Promise(r => setTimeout(r, 0))
+		}
+	}
 
 	// Mark file as indexed
 	await db.files.update(fileId, {indexedAt: new Date()})

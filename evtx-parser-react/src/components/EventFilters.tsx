@@ -23,6 +23,7 @@ interface Properties {
 }
 
 const LEVEL_INFO = {
+	0: {name: 'LogAlways', color: 'violet'},
 	1: {name: 'Critical', color: 'red'},
 	2: {name: 'Error', color: 'orange'},
 	3: {name: 'Warning', color: 'yellow'},
@@ -49,12 +50,12 @@ export function EventFilters({
 		}
 	}
 
-	const activeFilterCount = 5 - selectedLevels.length
+	const activeFilterCount = 6 - selectedLevels.length
 	const hasActiveFilters = searchQuery.trim() !== '' || activeFilterCount > 0
 
 	const clearAllFilters = () => {
 		onSearchChange('')
-		onLevelsChange([1, 2, 3, 4, 5])
+		onLevelsChange([0, 1, 2, 3, 4, 5])
 	}
 
 	return (
@@ -140,7 +141,7 @@ export function EventFilters({
 							</Text>
 							{activeFilterCount > 0 && (
 								<Button
-									onClick={() => onLevelsChange([1, 2, 3, 4, 5])}
+									onClick={() => onLevelsChange([0, 1, 2, 3, 4, 5])}
 									size='xs'
 									variant='subtle'
 								>

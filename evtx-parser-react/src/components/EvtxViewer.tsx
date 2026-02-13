@@ -42,7 +42,7 @@ export function EvtxViewer({
 	const [viewMode, setViewMode] = useState<ViewMode>('viewer')
 	const [searchQuery, setSearchQuery] = useState('')
 	const [selectedLevels, setSelectedLevels] = useState<number[]>([
-		1, 2, 3, 4, 5
+		0, 1, 2, 3, 4, 5
 	])
 
 	const isParsedMode = parsedResult !== undefined

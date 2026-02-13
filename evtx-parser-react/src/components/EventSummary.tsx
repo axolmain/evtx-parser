@@ -6,6 +6,7 @@ interface Properties {
 }
 
 const LEVEL_NAMES: Record<number, string> = {
+	0: 'LogAlways',
 	1: 'Critical',
 	2: 'Error',
 	3: 'Warning',
@@ -14,6 +15,7 @@ const LEVEL_NAMES: Record<number, string> = {
 }
 
 const LEVEL_COLORS: Record<number, string> = {
+	0: 'violet',
 	1: 'red',
 	2: 'orange',
 	3: 'yellow',
@@ -47,7 +49,7 @@ export function EventSummary({records}: Properties) {
 	return (
 		<Group gap='lg'>
 			<Group gap='xs'>
-				{[1, 2, 3, 4, 5].map(level => {
+				{[0, 1, 2, 3, 4, 5].map(level => {
 					const count = levelCounts[level] || 0
 					if (count === 0) return null
 					const color = LEVEL_COLORS[level]

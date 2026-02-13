@@ -16,6 +16,7 @@ interface Properties {
 }
 
 const LEVEL_COLORS: Record<number, string> = {
+	0: 'violet',
 	1: 'red',
 	2: 'orange',
 	3: 'yellow',
@@ -39,6 +40,7 @@ const DEFAULT_HIDDEN: MRT_VisibilityState = {
 }
 
 const LEVEL_SORT: Record<string, number> = {
+	LogAlways: 0,
 	Critical: 1,
 	Error: 2,
 	Warning: 3,
@@ -248,7 +250,8 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 			style: {fontSize: '0.8rem'},
 			className: 'compact-table-header'
 		},
-		mantineTableContainerProps: {style: {maxHeight: '600px'}},
+		layoutMode: 'grid',
+		mantineTableContainerProps: {style: {maxHeight: '600px', overflowX: 'auto'}},
 		renderDetailPanel: ({row}) => (
 			<Code block={true} fz='xs' mah={400} style={{overflow: 'auto'}}>
 				{row.original.xml}
