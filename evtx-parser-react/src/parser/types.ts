@@ -49,14 +49,6 @@ export interface TemplateDefinition {
 	readonly guid: string
 }
 
-export interface TemplateReference {
-	readonly dataSize: number
-	readonly defDataOffset: number
-	readonly guid: string
-	readonly isInline: boolean
-	readonly recordId: number
-}
-
 export interface TemplateMissingRef {
 	readonly defDataOffset: number
 	readonly guid: string
@@ -84,7 +76,6 @@ export interface TemplateStats {
 	missingRefs: TemplateMissingRef[]
 	parseErrors: TemplateParseError[]
 	referenceCount: number
-	references: TemplateReference[]
 }
 
 export interface SubstitutionValue {

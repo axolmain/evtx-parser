@@ -20,7 +20,6 @@ export type {
 	TemplateDefinition,
 	TemplateMissingRef,
 	TemplateParseError,
-	TemplateReference,
 	TemplateStats,
 	TemplateStatsSummary
 } from './types'

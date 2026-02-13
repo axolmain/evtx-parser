@@ -1,7 +1,7 @@
 import { BinXmlParser } from './binxml'
 import { HEX } from './constants'
 // import {formatChunkHeaderComment, formatRecordComment} from './format'
-import { formatGuid } from './helpers'
+import { filetimeToIso, formatGuid } from './helpers'
 import type {
 	ChunkHeader,
 	EvtxParseResult,
@@ -22,14 +22,6 @@ const LEVEL_NAMES: Record<number, string> = {
 }
 
 
-function filetimeToIso(dv: DataView, offset: number): string {
-	const ft = dv.getBigUint64(offset, true)
-	if (ft === 0n) return ''
-	const ms = Number(ft / 10000n - 11644473600000n)
-	const d = new Date(ms)
-	if (Number.isNaN(d.getTime())) return ''
-	return `${d.toISOString().slice(0, 19)}.${String(Number(ft % 10000000n)).padStart(7, '0')}Z`
-}
 
 export function parseFileHeader(
     buffer: ArrayBuffer | SharedArrayBuffer,
@@ -326,7 +318,6 @@ export function parseEvtx(
 		definitions: {},
 		defsByOffset: {},
 		definitionCount: 0,
-		references: [],
 		referenceCount: 0,
 		missingRefs: [],
 		missingCount: 0,

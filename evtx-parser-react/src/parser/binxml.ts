@@ -1,5 +1,6 @@
 import {HEX, TOKEN, VALUE_TYPE} from './constants'
 import {
+	filetimeLoHiToIso,
 	formatGuid,
 	hex32,
 	tokenName,
@@ -55,12 +56,13 @@ export class BinXmlParser {
 		return BinXmlParser.utf16.decode(strBytes)
 	}
 
+	// Uses this.chunkDv with bias computed from bytes.byteOffset — no local DataView needed
 	private readUnicodeTextString(
-		dv: DataView,
 		bytes: Uint8Array,
-		pos: ParsePosition
+		pos: ParsePosition,
+		dvBias: number
 	): string {
-		const numChars = dv.getUint16(pos.offset, true)
+		const numChars = this.chunkDv.getUint16(dvBias + pos.offset, true)
 		pos.offset += 2
 		const strBytes = new Uint8Array(
 			bytes.buffer,
@@ -201,12 +203,10 @@ export class BinXmlParser {
 			}
 			case VALUE_TYPE.FILETIME: {
 				if (valueBytes.length < 8) return ''
-				const ft = this.chunkDv.getBigUint64(vOff, true)
-				if (ft === 0n) return ''
-				const ms = Number(ft / 10000n - 11644473600000n)
-				const d = new Date(ms)
-				if (Number.isNaN(d.getTime())) return ''
-				return `${d.toISOString().slice(0, 19)}.${String(Number(ft % 10000000n)).padStart(7, '0')}Z`
+				return filetimeLoHiToIso(
+					this.chunkDv.getUint32(vOff, true),
+					this.chunkDv.getUint32(vOff + 4, true)
+				)
 			}
 			case VALUE_TYPE.SYSTEMTIME: {
 				if (valueBytes.length < 16) return ''
@@ -254,7 +254,6 @@ export class BinXmlParser {
 
 	private compileTemplate(
 		tplBytes: Uint8Array,
-		tplDv: DataView,
 		tplBodyStart: number
 	): CompiledTemplate | null {
 		const b: CompileBuilder = {
@@ -270,17 +269,17 @@ export class BinXmlParser {
 			pos.offset += 4
 		}
 
-		this.compileContent(tplBytes, tplDv, pos, tplBodyStart, b)
+		this.compileContent(tplBytes, pos, tplBodyStart, b)
 		return b.bail ? null : {parts: b.parts, subIds: b.subIds, isOptional: b.isOptional}
 	}
 
 	private compileContent(
 		bytes: Uint8Array,
-		dv: DataView,
 		pos: ParsePosition,
 		binxmlChunkBase: number,
 		b: CompileBuilder
 	): void {
+		const dvBias = bytes.byteOffset - this.chunkDv.byteOffset
 		while (pos.offset < bytes.length) {
 			if (b.bail) return
 			const tok = bytes[pos.offset] ?? 0
@@ -297,15 +296,15 @@ export class BinXmlParser {
 			}
 
 			if (base === TOKEN.OPEN_START_ELEMENT) {
-				this.compileElement(bytes, dv, pos, binxmlChunkBase, b)
+				this.compileElement(bytes, pos, binxmlChunkBase, b)
 			} else if (base === TOKEN.VALUE) {
 				pos.offset++ // consume token
 				pos.offset++ // value type
-				const str = this.readUnicodeTextString(dv, bytes, pos)
+				const str = this.readUnicodeTextString(bytes, pos, dvBias)
 				b.parts[b.parts.length - 1] += xmlEscape(str)
 			} else if (base === TOKEN.NORMAL_SUBSTITUTION) {
 				pos.offset++ // consume token
-				const subId = dv.getUint16(pos.offset, true)
+				const subId = this.chunkDv.getUint16(dvBias + pos.offset, true)
 				pos.offset += 2
 				pos.offset++ // subValType
 				b.subIds.push(subId)
@@ -313,7 +312,7 @@ export class BinXmlParser {
 				b.parts.push('')
 			} else if (base === TOKEN.OPTIONAL_SUBSTITUTION) {
 				pos.offset++ // consume token
-				const subId = dv.getUint16(pos.offset, true)
+				const subId = this.chunkDv.getUint16(dvBias + pos.offset, true)
 				pos.offset += 2
 				pos.offset++ // subValType
 				b.subIds.push(subId)
@@ -321,18 +320,18 @@ export class BinXmlParser {
 				b.parts.push('')
 			} else if (base === TOKEN.CHAR_REF) {
 				pos.offset++ // consume token
-				const charVal = dv.getUint16(pos.offset, true)
+				const charVal = this.chunkDv.getUint16(dvBias + pos.offset, true)
 				pos.offset += 2
 				b.parts[b.parts.length - 1] += '&#' + charVal + ';'
 			} else if (base === TOKEN.ENTITY_REF) {
 				pos.offset++ // consume token
-				const nameOff = dv.getUint32(pos.offset, true)
+				const nameOff = this.chunkDv.getUint32(dvBias + pos.offset, true)
 				pos.offset += 4
 				const entityName = this.readName(nameOff)
 				b.parts[b.parts.length - 1] += '&' + entityName + ';'
 			} else if (base === TOKEN.CDATA_SECTION) {
 				pos.offset++ // consume token
-				const cdataStr = this.readUnicodeTextString(dv, bytes, pos)
+				const cdataStr = this.readUnicodeTextString(bytes, pos, dvBias)
 				b.parts[b.parts.length - 1] += '<![CDATA[' + cdataStr + ']]>'
 			} else if (base === TOKEN.TEMPLATE_INSTANCE || base === TOKEN.FRAGMENT_HEADER) {
 				b.bail = true
@@ -347,22 +346,22 @@ export class BinXmlParser {
 
 	private compileElement(
 		bytes: Uint8Array,
-		dv: DataView,
 		pos: ParsePosition,
 		binxmlChunkBase: number,
 		b: CompileBuilder
 	): void {
+		const dvBias = bytes.byteOffset - this.chunkDv.byteOffset
 		const tok = bytes[pos.offset] ?? 0
 		const hasAttrs = Boolean(tok & TOKEN.HAS_MORE_DATA_FLAG)
 		pos.offset++ // consume token
 
 		pos.offset += 2 // depId
 		pos.offset += 4 // dataSize
-		const nameOffset = dv.getUint32(pos.offset, true)
+		const nameOffset = this.chunkDv.getUint32(dvBias + pos.offset, true)
 		pos.offset += 4
 		// Inline name structure present only when defined here
 		if (nameOffset === binxmlChunkBase + pos.offset) {
-			const elemNameChars = dv.getUint16(pos.offset + 6, true)
+			const elemNameChars = this.chunkDv.getUint16(dvBias + pos.offset + 6, true)
 			pos.offset += 10 + elemNameChars * 2
 		}
 
@@ -371,7 +370,7 @@ export class BinXmlParser {
 
 		// Parse attribute list if present
 		if (hasAttrs) {
-			const attrListSize = dv.getUint32(pos.offset, true)
+			const attrListSize = this.chunkDv.getUint32(dvBias + pos.offset, true)
 			pos.offset += 4
 			const attrEnd = pos.offset + attrListSize
 
@@ -382,17 +381,17 @@ export class BinXmlParser {
 				if (attrBase !== TOKEN.ATTRIBUTE) break
 
 				pos.offset++ // consume attribute token
-				const attrNameOff = dv.getUint32(pos.offset, true)
+				const attrNameOff = this.chunkDv.getUint32(dvBias + pos.offset, true)
 				pos.offset += 4
 				// Inline name structure present only when defined here
 				if (attrNameOff === binxmlChunkBase + pos.offset) {
-					const attrNameChars = dv.getUint16(pos.offset + 6, true)
+					const attrNameChars = this.chunkDv.getUint16(dvBias + pos.offset + 6, true)
 					pos.offset += 10 + attrNameChars * 2
 				}
 				const attrName = this.readName(attrNameOff)
 
 				b.parts[b.parts.length - 1] += ' ' + attrName + '="'
-				this.compileContent(bytes, dv, pos, binxmlChunkBase, b)
+				this.compileContent(bytes, pos, binxmlChunkBase, b)
 				if (b.bail) return
 				b.parts[b.parts.length - 1] += '"'
 			}
@@ -411,7 +410,7 @@ export class BinXmlParser {
 		} else if (closeTok === TOKEN.CLOSE_START_ELEMENT) {
 			pos.offset++ // consume 0x02
 			b.parts[b.parts.length - 1] += '>'
-			this.compileContent(bytes, dv, pos, binxmlChunkBase, b)
+			this.compileContent(bytes, pos, binxmlChunkBase, b)
 			if (b.bail) return
 			if (pos.offset < bytes.length && bytes[pos.offset] === TOKEN.END_ELEMENT) {
 				pos.offset++
@@ -447,11 +446,11 @@ export class BinXmlParser {
 
 	private parseContent(
 		bytes: Uint8Array,
-		dv: DataView,
 		pos: ParsePosition,
 		subs: SubstitutionValue[] | null,
 		binxmlChunkBase: number
 	): string {
+		const dvBias = bytes.byteOffset - this.chunkDv.byteOffset
 		let result = ''
 
 		while (pos.offset < bytes.length) {
@@ -469,15 +468,15 @@ export class BinXmlParser {
 			}
 
 			if (base === TOKEN.OPEN_START_ELEMENT) {
-				result += this.parseElement(bytes, dv, pos, subs, binxmlChunkBase)
+				result += this.parseElement(bytes, pos, subs, binxmlChunkBase)
 			} else if (base === TOKEN.VALUE) {
 				pos.offset++ // consume token
 				pos.offset++ // value type
-				const str = this.readUnicodeTextString(dv, bytes, pos)
+				const str = this.readUnicodeTextString(bytes, pos, dvBias)
 				result += xmlEscape(str)
 			} else if (base === TOKEN.NORMAL_SUBSTITUTION) {
 				pos.offset++ // consume token
-				const subId = dv.getUint16(pos.offset, true)
+				const subId = this.chunkDv.getUint16(dvBias + pos.offset, true)
 				pos.offset += 2
 				pos.offset++ // subValType
 				if (subs && subId < subs.length) {
@@ -489,7 +488,7 @@ export class BinXmlParser {
 				}
 			} else if (base === TOKEN.OPTIONAL_SUBSTITUTION) {
 				pos.offset++ // consume token
-				const subId = dv.getUint16(pos.offset, true)
+				const subId = this.chunkDv.getUint16(dvBias + pos.offset, true)
 				pos.offset += 2
 				pos.offset++ // subValType
 				if (subs && subId < subs.length) {
@@ -503,23 +502,23 @@ export class BinXmlParser {
 				}
 			} else if (base === TOKEN.CHAR_REF) {
 				pos.offset++ // consume token
-				const charVal = dv.getUint16(pos.offset, true)
+				const charVal = this.chunkDv.getUint16(dvBias + pos.offset, true)
 				pos.offset += 2
 				result += '&#' + charVal + ';'
 			} else if (base === TOKEN.ENTITY_REF) {
 				pos.offset++ // consume token
-				const nameOff = dv.getUint32(pos.offset, true)
+				const nameOff = this.chunkDv.getUint32(dvBias + pos.offset, true)
 				pos.offset += 4
 				const entityName = this.readName(nameOff)
 				result += '&' + entityName + ';'
 			} else if (base === TOKEN.CDATA_SECTION) {
 				pos.offset++ // consume token
-				const cdataStr = this.readUnicodeTextString(dv, bytes, pos)
+				const cdataStr = this.readUnicodeTextString(bytes, pos, dvBias)
 				result += '<![CDATA[' + cdataStr + ']]>'
 			} else if (base === TOKEN.TEMPLATE_INSTANCE) {
-				result += this.parseTemplateInstance(bytes, dv, pos, binxmlChunkBase)
+				result += this.parseTemplateInstance(bytes, pos, binxmlChunkBase)
 			} else if (base === TOKEN.FRAGMENT_HEADER) {
-				result += this.parseFragment(bytes, dv, pos, binxmlChunkBase)
+				result += this.parseFragment(bytes, pos, binxmlChunkBase)
 			} else {
 				result += '<!-- UNEXPECTED content token 0x' + (HEX[tok] ?? '??') +
 					' (' + tokenName(tok) + ') at offset ' + pos.offset + ' -->'
@@ -532,22 +531,22 @@ export class BinXmlParser {
 
 	private parseElement(
 		bytes: Uint8Array,
-		dv: DataView,
 		pos: ParsePosition,
 		subs: SubstitutionValue[] | null,
 		binxmlChunkBase: number
 	): string {
+		const dvBias = bytes.byteOffset - this.chunkDv.byteOffset
 		const tok = bytes[pos.offset] ?? 0
 		const hasAttrs = Boolean(tok & TOKEN.HAS_MORE_DATA_FLAG)
 		pos.offset++ // consume token
 
 		pos.offset += 2 // depId
 		pos.offset += 4 // dataSize
-		const nameOffset = dv.getUint32(pos.offset, true)
+		const nameOffset = this.chunkDv.getUint32(dvBias + pos.offset, true)
 		pos.offset += 4
 		// Inline name structure is present only when defined here (nameOffset points to current chunk position)
 		if (nameOffset === binxmlChunkBase + pos.offset) {
-			const elemNameChars = dv.getUint16(pos.offset + 6, true)
+			const elemNameChars = this.chunkDv.getUint16(dvBias + pos.offset + 6, true)
 			pos.offset += 10 + elemNameChars * 2
 		}
 
@@ -556,7 +555,7 @@ export class BinXmlParser {
 
 		// Parse attribute list if present
 		if (hasAttrs) {
-			const attrListSize = dv.getUint32(pos.offset, true)
+			const attrListSize = this.chunkDv.getUint32(dvBias + pos.offset, true)
 			pos.offset += 4
 			const attrEnd = pos.offset + attrListSize
 
@@ -566,18 +565,17 @@ export class BinXmlParser {
 				if (attrBase !== TOKEN.ATTRIBUTE) break
 
 				pos.offset++ // consume attribute token
-				const attrNameOff = dv.getUint32(pos.offset, true)
+				const attrNameOff = this.chunkDv.getUint32(dvBias + pos.offset, true)
 				pos.offset += 4
 				// Inline name structure present only when defined here
 				if (attrNameOff === binxmlChunkBase + pos.offset) {
-					const attrNameChars = dv.getUint16(pos.offset + 6, true)
+					const attrNameChars = this.chunkDv.getUint16(dvBias + pos.offset + 6, true)
 					pos.offset += 10 + attrNameChars * 2
 				}
 				const attrName = this.readName(attrNameOff)
 
 				const attrValue = this.parseContent(
 					bytes,
-					dv,
 					pos,
 					subs,
 					binxmlChunkBase
@@ -598,7 +596,7 @@ export class BinXmlParser {
 		} else if (closeTok === TOKEN.CLOSE_START_ELEMENT) {
 			pos.offset++ // consume 0x02
 			xml += '>'
-			xml += this.parseContent(bytes, dv, pos, subs, binxmlChunkBase)
+			xml += this.parseContent(bytes, pos, subs, binxmlChunkBase)
 			if (pos.offset < bytes.length && bytes[pos.offset] === TOKEN.END_ELEMENT) {
 				pos.offset++
 			}
@@ -611,16 +609,16 @@ export class BinXmlParser {
 
 	private parseTemplateInstance(
 		bytes: Uint8Array,
-		dv: DataView,
 		pos: ParsePosition,
 		binxmlChunkBase: number
 	): string {
+		const dvBias = bytes.byteOffset - this.chunkDv.byteOffset
 		pos.offset++ // consume 0x0C token
 
 		// Read the always-present 9 bytes
 		pos.offset++ // unknown1 (version?)
 		pos.offset += 4 // unknown2 (template id?)
-		const defDataOffset = dv.getUint32(pos.offset, true)
+		const defDataOffset = this.chunkDv.getUint32(dvBias + pos.offset, true)
 		pos.offset += 4
 
 		// Determine inline vs back-reference
@@ -639,7 +637,7 @@ export class BinXmlParser {
 			)
 			guidStr = formatGuid(guidBytesArr)
 			pos.offset += 16
-			dataSize = dv.getUint32(pos.offset, true)
+			dataSize = this.chunkDv.getUint32(dvBias + pos.offset, true)
 			pos.offset += 4
 
 			if (this.tplStats) {
@@ -688,20 +686,13 @@ export class BinXmlParser {
 			}
 		}
 
-		// Track reference
+		// Track reference count (array not needed — only count is exported)
 		if (this.tplStats) {
-			this.tplStats.references.push({
-				recordId: this.tplStats.currentRecordId,
-				guid: guidStr,
-				defDataOffset,
-				dataSize,
-				isInline
-			})
 			this.tplStats.referenceCount++
 		}
 
 		// --- Template Instance Data ---
-		const numValues = dv.getUint32(pos.offset, true)
+		const numValues = this.chunkDv.getUint32(dvBias + pos.offset, true)
 		pos.offset += 4
 
 		// Read descriptors inline (no intermediate array allocation)
@@ -712,7 +703,7 @@ export class BinXmlParser {
 		const subs: SubstitutionValue[] = []
 		for (let i = 0; i < numValues; i++) {
 			const descOff = descStart + i * 4
-			const valSize = dv.getUint16(descOff, true)
+			const valSize = this.chunkDv.getUint16(dvBias + descOff, true)
 			const valType = bytes[descOff + 2] ?? 0
 
 			let valBytes: Uint8Array
@@ -757,16 +748,11 @@ export class BinXmlParser {
 				this.chunkDv.byteOffset + tplBodyStart,
 				dataSize
 			)
-			const tplDv = new DataView(
-				tplBytes.buffer,
-				tplBytes.byteOffset,
-				tplBytes.byteLength
-			)
 
 			// Check compiled cache (keyed by GUID, persists across chunks)
 			let compiled = this.tplStats.compiled.get(guidStr)
 			if (compiled === undefined) {
-				compiled = this.compileTemplate(tplBytes, tplDv, tplBodyStart)
+				compiled = this.compileTemplate(tplBytes, tplBodyStart)
 				this.tplStats.compiled.set(guidStr, compiled)
 			}
 
@@ -783,7 +769,6 @@ export class BinXmlParser {
 
 				xml = this.parseContent(
 					tplBytes,
-					tplDv,
 					tplPos,
 					subs,
 					tplBodyStart
@@ -811,7 +796,7 @@ export class BinXmlParser {
 		binxmlChunkBase: number
 	): string {
 		const pos: ParsePosition = {offset: 0}
-		const dv = new DataView(binxml.buffer, binxml.byteOffset, binxml.byteLength)
+		const dvBias = binxml.byteOffset - this.chunkDv.byteOffset
 		let result = ''
 
 		while (pos.offset < binxml.length) {
@@ -822,16 +807,16 @@ export class BinXmlParser {
 				break
 			}
 			if (base === TOKEN.FRAGMENT_HEADER) {
-				result += this.parseFragment(binxml, dv, pos, binxmlChunkBase)
+				result += this.parseFragment(binxml, pos, binxmlChunkBase)
 			} else if (base === TOKEN.PI_TARGET) {
 				pos.offset++ // consume 0x0A
-				const piNameOff = dv.getUint32(pos.offset, true)
+				const piNameOff = this.chunkDv.getUint32(dvBias + pos.offset, true)
 				pos.offset += 4
 				const piName = this.readName(piNameOff)
 				let pi = '<?' + piName
 				if (pos.offset < binxml.length && binxml[pos.offset] === TOKEN.PI_DATA) {
 					pos.offset++ // consume 0x0B
-					const piText = this.readUnicodeTextString(dv, binxml, pos)
+					const piText = this.readUnicodeTextString(binxml, pos, dvBias)
 					if (piText) pi += ' ' + piText
 				}
 				result += pi + '?>'
@@ -847,7 +832,6 @@ export class BinXmlParser {
 
 	private parseFragment(
 		binxml: Uint8Array,
-		dv: DataView,
 		pos: ParsePosition,
 		binxmlChunkBase: number
 	): string {
@@ -866,10 +850,10 @@ export class BinXmlParser {
 		const nextBase = nextTok & ~TOKEN.HAS_MORE_DATA_FLAG
 
 		if (nextBase === TOKEN.TEMPLATE_INSTANCE) {
-			return this.parseTemplateInstance(binxml, dv, pos, binxmlChunkBase)
+			return this.parseTemplateInstance(binxml, pos, binxmlChunkBase)
 		}
 		if (nextBase === TOKEN.OPEN_START_ELEMENT) {
-			return this.parseElement(binxml, dv, pos, null, binxmlChunkBase)
+			return this.parseElement(binxml, pos, null, binxmlChunkBase)
 		}
 		return '<!-- UNEXPECTED post-fragment token 0x' + (HEX[nextTok] ?? '??') +
 			' (' + tokenName(nextTok) + ') at offset ' + pos.offset + ' -->\n'
