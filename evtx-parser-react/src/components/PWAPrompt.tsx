@@ -1,9 +1,16 @@
 import {useRegisterSW} from 'virtual:pwa-register/react'
 import {Button, Group, Notification} from '@mantine/core'
-import {useEffect, useState} from 'react'
+import {useEffect, useRef, useState} from 'react'
+
+interface BeforeInstallPromptEvent extends Event {
+	prompt(): Promise<void>
+	userChoice: Promise<{outcome: 'accepted' | 'dismissed'}>
+}
 
 export function PWAPrompt() {
 	const [showInstallPrompt, setShowInstallPrompt] = useState(false)
+	const [installable, setInstallable] = useState(false)
+	const deferredPrompt = useRef<BeforeInstallPromptEvent | null>(null)
 
 	const {
 		offlineReady: [offlineReady, setOfflineReady],
@@ -20,20 +27,65 @@ export function PWAPrompt() {
 		setShowInstallPrompt(false)
 	}
 
+	const dismissInstall = () => {
+		deferredPrompt.current = null
+		setInstallable(false)
+	}
+
+	const handleInstall = async () => {
+		const prompt = deferredPrompt.current
+		if (!prompt) return
+		await prompt.prompt()
+		const {outcome} = await prompt.userChoice
+		if (outcome === 'accepted') {
+			deferredPrompt.current = null
+			setInstallable(false)
+		}
+	}
+
 	useEffect(() => {
 		if (offlineReady) {
 			setShowInstallPrompt(true)
 		}
 	}, [offlineReady])
 
-	if (!(offlineReady || needRefresh)) {
+	useEffect(() => {
+		const handler = (e: Event) => {
+			e.preventDefault()
+			deferredPrompt.current = e as BeforeInstallPromptEvent
+			setInstallable(true)
+		}
+		window.addEventListener('beforeinstallprompt', handler)
+		return () => window.removeEventListener('beforeinstallprompt', handler)
+	}, [])
+
+	if (!(offlineReady || needRefresh || installable)) {
 		return null
 	}
 
 	return (
 		<div
-			style={{position: 'fixed', bottom: '1rem', right: '1rem', zIndex: 9999}}
+			style={{position: 'fixed', bottom: '1rem', right: '1rem', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '0.5rem'}}
 		>
+			{installable && (
+				<Notification
+					color='violet'
+					onClose={dismissInstall}
+					title='Install app'
+					withCloseButton={true}
+				>
+					Install EVTX Parser for quick access and offline use.
+					<Group gap='xs' mt='sm'>
+						<Button onClick={handleInstall} size='xs'>
+							Install
+						</Button>
+						<Button onClick={dismissInstall} size='xs' variant='subtle'>
+							Not now
+						</Button>
+					</Group>
+				</Notification>
+			)}
+
 			{offlineReady && showInstallPrompt && (
 				<Notification
 					color='green'
