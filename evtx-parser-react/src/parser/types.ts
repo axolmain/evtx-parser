@@ -68,7 +68,14 @@ export interface TemplateParseError {
 	readonly recordId: number
 }
 
+export interface CompiledTemplate {
+	parts: string[]       // N+1 literal text segments (like template literal quasis)
+	subIds: number[]      // N substitution indices between the literal parts
+	isOptional: boolean[] // N flags — true = skip if sub is NULL/empty
+}
+
 export interface TemplateStats {
+	compiled: Map<string, CompiledTemplate | null>
 	currentRecordId: number
 	defsByOffset: Record<number, TemplateDefinition>
 	definitionCount: number

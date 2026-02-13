@@ -1,4 +1,4 @@
-/* Compact table header styling */
+/* Compact table header styling
 .compact-table-header .mantine-ActionIcon-root {
 	width: 22px !important;
 	height: 22px !important;
@@ -9,9 +9,9 @@
 .compact-table-header svg {
 	width: 14px !important;
 	height: 14px !important;
-}
+} */
 
 /* Make column drag handle more compact */
-.compact-table-header [data-column-drag-handle] {
+/* .compact-table-header [data-column-drag-handle] {
 	padding: 4px !important;
-}
+} */

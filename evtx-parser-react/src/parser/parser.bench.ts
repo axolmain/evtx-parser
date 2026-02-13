@@ -138,6 +138,7 @@ if (evtxFiles.length === 0) {
 					const header = parseFileHeader(file.buffer, dv)
 					const offsets = discoverChunkOffsets(dv, header.headerBlockSize)
 					const tplStats: TemplateStats = {
+						compiled: new Map(),
 						definitions: {},
 						defsByOffset: {},
 						definitionCount: 0,
@@ -170,6 +171,7 @@ if (evtxFiles.length === 0) {
 					const header = parseFileHeader(file.buffer, dv)
 					const offsets = discoverChunkOffsets(dv, header.headerBlockSize)
 					const tplStats: TemplateStats = {
+						compiled: new Map(),
 						definitions: {},
 						defsByOffset: {},
 						definitionCount: 0,
@@ -195,6 +197,7 @@ if (evtxFiles.length === 0) {
 					const header = parseFileHeader(file.buffer, dv)
 					const offsets = discoverChunkOffsets(dv, header.headerBlockSize)
 					const tplStats: TemplateStats = {
+						compiled: new Map(),
 						definitions: {},
 						defsByOffset: {},
 						definitionCount: 0,
@@ -227,6 +230,7 @@ if (evtxFiles.length === 0) {
 				const offsets = discoverChunkOffsets(dv, header.headerBlockSize)
 				const xmlStrings: string[] = []
 				const tplStats: TemplateStats = {
+					compiled: new Map(),
 					definitions: {},
 					defsByOffset: {},
 					definitionCount: 0,

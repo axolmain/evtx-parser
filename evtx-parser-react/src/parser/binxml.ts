@@ -7,6 +7,7 @@ import {
 } from './helpers'
 import type {
 	ChunkHeader,
+	CompiledTemplate,
 	ParsePosition,
 	SubstitutionValue,
 	TemplateStats
@@ -14,6 +15,13 @@ import type {
 
 // Shared empty bytes — reused for all zero-size substitution values
 const EMPTY_BYTES = new Uint8Array(0)
+
+interface CompileBuilder {
+	parts: string[]
+	subIds: number[]
+	isOptional: boolean[]
+	bail: boolean
+}
 
 export class BinXmlParser {
 	// Cached decoders — shared across ALL instances, never re-allocated
@@ -242,6 +250,199 @@ export class BinXmlParser {
 				return '<!-- unknown value type 0x' + (HEX[valueType] ?? '??') + ' -->' + hex
 			}
 		}
+	}
+
+	private compileTemplate(
+		tplBytes: Uint8Array,
+		tplDv: DataView,
+		tplBodyStart: number
+	): CompiledTemplate | null {
+		const b: CompileBuilder = {
+			parts: [''],
+			subIds: [],
+			isOptional: [],
+			bail: false
+		}
+		const pos: ParsePosition = {offset: 0}
+
+		// Skip fragment header if present
+		if (tplBytes.length >= 4 && tplBytes[0] === TOKEN.FRAGMENT_HEADER) {
+			pos.offset += 4
+		}
+
+		this.compileContent(tplBytes, tplDv, pos, tplBodyStart, b)
+		return b.bail ? null : {parts: b.parts, subIds: b.subIds, isOptional: b.isOptional}
+	}
+
+	private compileContent(
+		bytes: Uint8Array,
+		dv: DataView,
+		pos: ParsePosition,
+		binxmlChunkBase: number,
+		b: CompileBuilder
+	): void {
+		while (pos.offset < bytes.length) {
+			if (b.bail) return
+			const tok = bytes[pos.offset] ?? 0
+			const base = tok & ~TOKEN.HAS_MORE_DATA_FLAG
+
+			if (
+				base === TOKEN.EOF ||
+				base === TOKEN.CLOSE_START_ELEMENT ||
+				base === TOKEN.CLOSE_EMPTY_ELEMENT ||
+				base === TOKEN.END_ELEMENT ||
+				base === TOKEN.ATTRIBUTE
+			) {
+				break
+			}
+
+			if (base === TOKEN.OPEN_START_ELEMENT) {
+				this.compileElement(bytes, dv, pos, binxmlChunkBase, b)
+			} else if (base === TOKEN.VALUE) {
+				pos.offset++ // consume token
+				pos.offset++ // value type
+				const str = this.readUnicodeTextString(dv, bytes, pos)
+				b.parts[b.parts.length - 1] += xmlEscape(str)
+			} else if (base === TOKEN.NORMAL_SUBSTITUTION) {
+				pos.offset++ // consume token
+				const subId = dv.getUint16(pos.offset, true)
+				pos.offset += 2
+				pos.offset++ // subValType
+				b.subIds.push(subId)
+				b.isOptional.push(false)
+				b.parts.push('')
+			} else if (base === TOKEN.OPTIONAL_SUBSTITUTION) {
+				pos.offset++ // consume token
+				const subId = dv.getUint16(pos.offset, true)
+				pos.offset += 2
+				pos.offset++ // subValType
+				b.subIds.push(subId)
+				b.isOptional.push(true)
+				b.parts.push('')
+			} else if (base === TOKEN.CHAR_REF) {
+				pos.offset++ // consume token
+				const charVal = dv.getUint16(pos.offset, true)
+				pos.offset += 2
+				b.parts[b.parts.length - 1] += '&#' + charVal + ';'
+			} else if (base === TOKEN.ENTITY_REF) {
+				pos.offset++ // consume token
+				const nameOff = dv.getUint32(pos.offset, true)
+				pos.offset += 4
+				const entityName = this.readName(nameOff)
+				b.parts[b.parts.length - 1] += '&' + entityName + ';'
+			} else if (base === TOKEN.CDATA_SECTION) {
+				pos.offset++ // consume token
+				const cdataStr = this.readUnicodeTextString(dv, bytes, pos)
+				b.parts[b.parts.length - 1] += '<![CDATA[' + cdataStr + ']]>'
+			} else if (base === TOKEN.TEMPLATE_INSTANCE || base === TOKEN.FRAGMENT_HEADER) {
+				b.bail = true
+				return
+			} else {
+				// Unknown token — bail to generic parser
+				b.bail = true
+				return
+			}
+		}
+	}
+
+	private compileElement(
+		bytes: Uint8Array,
+		dv: DataView,
+		pos: ParsePosition,
+		binxmlChunkBase: number,
+		b: CompileBuilder
+	): void {
+		const tok = bytes[pos.offset] ?? 0
+		const hasAttrs = Boolean(tok & TOKEN.HAS_MORE_DATA_FLAG)
+		pos.offset++ // consume token
+
+		pos.offset += 2 // depId
+		pos.offset += 4 // dataSize
+		const nameOffset = dv.getUint32(pos.offset, true)
+		pos.offset += 4
+		// Inline name structure present only when defined here
+		if (nameOffset === binxmlChunkBase + pos.offset) {
+			const elemNameChars = dv.getUint16(pos.offset + 6, true)
+			pos.offset += 10 + elemNameChars * 2
+		}
+
+		const elemName = this.readName(nameOffset)
+		b.parts[b.parts.length - 1] += '<' + elemName
+
+		// Parse attribute list if present
+		if (hasAttrs) {
+			const attrListSize = dv.getUint32(pos.offset, true)
+			pos.offset += 4
+			const attrEnd = pos.offset + attrListSize
+
+			while (pos.offset < attrEnd) {
+				if (b.bail) return
+				const attrTok = bytes[pos.offset] ?? 0
+				const attrBase = attrTok & ~TOKEN.HAS_MORE_DATA_FLAG
+				if (attrBase !== TOKEN.ATTRIBUTE) break
+
+				pos.offset++ // consume attribute token
+				const attrNameOff = dv.getUint32(pos.offset, true)
+				pos.offset += 4
+				// Inline name structure present only when defined here
+				if (attrNameOff === binxmlChunkBase + pos.offset) {
+					const attrNameChars = dv.getUint16(pos.offset + 6, true)
+					pos.offset += 10 + attrNameChars * 2
+				}
+				const attrName = this.readName(attrNameOff)
+
+				b.parts[b.parts.length - 1] += ' ' + attrName + '="'
+				this.compileContent(bytes, dv, pos, binxmlChunkBase, b)
+				if (b.bail) return
+				b.parts[b.parts.length - 1] += '"'
+			}
+		}
+
+		// Next token: CloseEmptyElement or CloseStartElement
+		if (pos.offset >= bytes.length) {
+			b.parts[b.parts.length - 1] += '/>'
+			return
+		}
+
+		const closeTok = bytes[pos.offset] ?? 0
+		if (closeTok === TOKEN.CLOSE_EMPTY_ELEMENT) {
+			pos.offset++ // consume 0x03
+			b.parts[b.parts.length - 1] += '/>'
+		} else if (closeTok === TOKEN.CLOSE_START_ELEMENT) {
+			pos.offset++ // consume 0x02
+			b.parts[b.parts.length - 1] += '>'
+			this.compileContent(bytes, dv, pos, binxmlChunkBase, b)
+			if (b.bail) return
+			if (pos.offset < bytes.length && bytes[pos.offset] === TOKEN.END_ELEMENT) {
+				pos.offset++
+			}
+			b.parts[b.parts.length - 1] += '</' + elemName + '>'
+		} else {
+			b.parts[b.parts.length - 1] += '><!-- UNEXPECTED close token 0x' +
+				(HEX[closeTok] ?? '??') + ' --></' + elemName + '>'
+		}
+	}
+
+	private renderCompiled(
+		compiled: CompiledTemplate,
+		subs: SubstitutionValue[]
+	): string {
+		const {parts, subIds, isOptional} = compiled
+		let result = parts[0]!
+		for (let i = 0; i < subIds.length; i++) {
+			const subId = subIds[i]!
+			if (subId < subs.length) {
+				const sub = subs[subId]!
+				if (!isOptional[i] || (sub.type !== VALUE_TYPE.NULL && sub.size > 0)) {
+					if (sub.rendered === null) {
+						sub.rendered = this.renderSubstitutionValue(sub.bytes, sub.type)
+					}
+					result += sub.rendered
+				}
+			}
+			result += parts[i + 1]!
+		}
+		return result
 	}
 
 	private parseContent(
@@ -561,20 +762,33 @@ export class BinXmlParser {
 				tplBytes.byteOffset,
 				tplBytes.byteLength
 			)
-			const tplPos: ParsePosition = {offset: 0}
 
-			// Skip fragment header (4 bytes: 0x0F, major, minor, flags)
-			if (tplBytes.length >= 4 && tplBytes[0] === TOKEN.FRAGMENT_HEADER) {
-				tplPos.offset += 4
+			// Check compiled cache (keyed by GUID, persists across chunks)
+			let compiled = this.tplStats.compiled.get(guidStr)
+			if (compiled === undefined) {
+				compiled = this.compileTemplate(tplBytes, tplDv, tplBodyStart)
+				this.tplStats.compiled.set(guidStr, compiled)
 			}
 
-			xml = this.parseContent(
-				tplBytes,
-				tplDv,
-				tplPos,
-				subs,
-				tplBodyStart
-			)
+			if (compiled !== null) {
+				xml = this.renderCompiled(compiled, subs)
+			} else {
+				// Fall through to generic parseContent path
+				const tplPos: ParsePosition = {offset: 0}
+
+				// Skip fragment header (4 bytes: 0x0F, major, minor, flags)
+				if (tplBytes.length >= 4 && tplBytes[0] === TOKEN.FRAGMENT_HEADER) {
+					tplPos.offset += 4
+				}
+
+				xml = this.parseContent(
+					tplBytes,
+					tplDv,
+					tplPos,
+					subs,
+					tplBodyStart
+				)
+			}
 		} catch (e) {
 			xml = `<!-- template parse error: ${e instanceof Error ? e.message : String(e)} -->`
 			tplFound = false

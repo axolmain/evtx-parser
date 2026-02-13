@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|-------|
 | **Version** | 0.0.0 |
-| **Date** | 2026-02-13 06:46:04 UTC |
+| **Date** | 2026-02-13 06:59:51 UTC |
 | **Node** | v25.6.0 |
 | **Platform** | darwin arm64 |
 
@@ -22,51 +22,51 @@
 
 | Benchmark | runs | avg (ms) | min (ms) | max (ms) | median (ms) |
 |-----------|------|----------|----------|----------|-------------|
-| parseEvtx (full pipeline) | 25 | 940.43 | 914.06 | 1229.45 | 921.33 |
-| parseFileHeader | 3065607 | 0.00 | 0.00 | 0.78 | 0.00 |
-| discoverChunkOffsets | 295068 | 0.00 | 0.00 | 0.74 | 0.00 |
-| parseChunk (all chunks) | 36 | 18.24 | 16.67 | 22.15 | 18.09 |
-| parseEventRecord (all records) | 25 | 907.86 | 889.18 | 933.52 | 906.13 |
-| preloadTemplateDefinitions (all chunks) | 33 | 20.46 | 18.60 | 43.56 | 19.02 |
-| BinXmlParser.parseDocument (all records) | 25 | 723.14 | 711.28 | 738.62 | 721.97 |
-| parseEventXml (all records) | 25 | 128.21 | 122.61 | 182.48 | 125.65 |
+| parseEvtx (full pipeline) | 25 | 400.18 | 388.03 | 487.37 | 395.98 |
+| parseFileHeader | 3037875 | 0.00 | 0.00 | 0.05 | 0.00 |
+| discoverChunkOffsets | 296510 | 0.00 | 0.00 | 0.64 | 0.00 |
+| parseChunk (all chunks) | 38 | 17.12 | 16.59 | 21.10 | 16.76 |
+| parseEventRecord (all records) | 25 | 383.55 | 376.70 | 448.14 | 381.79 |
+| preloadTemplateDefinitions (all chunks) | 34 | 19.82 | 18.92 | 27.19 | 19.16 |
+| BinXmlParser.parseDocument (all records) | 25 | 209.31 | 206.33 | 211.57 | 209.54 |
+| parseEventXml (all records) | 25 | 122.71 | 119.69 | 157.16 | 121.27 |
 
 ### Cadwell.evtx (1.07 MB, 1,388 records, 11 chunks)
 
 | Benchmark | runs | avg (ms) | min (ms) | max (ms) | median (ms) |
 |-----------|------|----------|----------|----------|-------------|
-| parseEvtx (full pipeline) | 25 | 42.07 | 38.85 | 47.46 | 40.24 |
-| parseFileHeader | 2717939 | 0.00 | 0.00 | 0.08 | 0.00 |
-| discoverChunkOffsets | 1899672 | 0.00 | 0.00 | 1.35 | 0.00 |
-| parseChunk (all chunks) | 459 | 1.32 | 1.28 | 2.05 | 1.30 |
-| parseEventRecord (all records) | 25 | 39.74 | 37.83 | 42.02 | 39.38 |
-| preloadTemplateDefinitions (all chunks) | 439 | 1.38 | 1.33 | 3.04 | 1.36 |
-| BinXmlParser.parseDocument (all records) | 26 | 30.74 | 29.71 | 31.58 | 30.87 |
-| parseEventXml (all records) | 97 | 6.44 | 6.27 | 7.78 | 6.38 |
+| parseEvtx (full pipeline) | 34 | 19.88 | 18.39 | 24.15 | 18.81 |
+| parseFileHeader | 2775599 | 0.00 | 0.00 | 0.05 | 0.00 |
+| discoverChunkOffsets | 1956332 | 0.00 | 0.00 | 0.50 | 0.00 |
+| parseChunk (all chunks) | 458 | 1.32 | 1.28 | 1.76 | 1.31 |
+| parseEventRecord (all records) | 35 | 19.09 | 17.94 | 23.03 | 18.17 |
+| preloadTemplateDefinitions (all chunks) | 434 | 1.39 | 1.35 | 3.88 | 1.37 |
+| BinXmlParser.parseDocument (all records) | 57 | 11.08 | 9.84 | 16.52 | 10.25 |
+| parseEventXml (all records) | 90 | 6.95 | 6.32 | 10.86 | 6.40 |
 
 ### ForSeb.evtx (13.07 MB, 21,940 records, 201 chunks)
 
 | Benchmark | runs | avg (ms) | min (ms) | max (ms) | median (ms) |
 |-----------|------|----------|----------|----------|-------------|
-| parseEvtx (full pipeline) | 25 | 651.19 | 644.95 | 672.34 | 649.55 |
-| parseFileHeader | 2692123 | 0.00 | 0.00 | 3.00 | 0.00 |
-| discoverChunkOffsets | 426881 | 0.00 | 0.00 | 1.39 | 0.00 |
-| parseChunk (all chunks) | 31 | 21.49 | 20.48 | 23.87 | 21.32 |
-| parseEventRecord (all records) | 25 | 654.22 | 636.39 | 820.23 | 644.90 |
-| preloadTemplateDefinitions (all chunks) | 30 | 22.25 | 21.27 | 24.41 | 22.35 |
-| BinXmlParser.parseDocument (all records) | 25 | 499.56 | 487.87 | 527.64 | 497.60 |
-| parseEventXml (all records) | 25 | 103.48 | 100.15 | 126.66 | 101.27 |
+| parseEvtx (full pipeline) | 25 | 317.20 | 303.09 | 395.86 | 314.10 |
+| parseFileHeader | 2592940 | 0.00 | 0.00 | 6.12 | 0.00 |
+| discoverChunkOffsets | 450286 | 0.00 | 0.00 | 0.59 | 0.00 |
+| parseChunk (all chunks) | 30 | 21.88 | 20.69 | 24.02 | 21.90 |
+| parseEventRecord (all records) | 25 | 318.93 | 300.43 | 434.89 | 308.46 |
+| preloadTemplateDefinitions (all chunks) | 30 | 21.91 | 21.31 | 23.56 | 21.68 |
+| BinXmlParser.parseDocument (all records) | 25 | 169.07 | 166.89 | 172.71 | 168.43 |
+| parseEventXml (all records) | 25 | 100.83 | 98.72 | 117.95 | 99.83 |
 
 ### System.evtx (20.07 MB, 42,007 records, 315 chunks)
 
 | Benchmark | runs | avg (ms) | min (ms) | max (ms) | median (ms) |
 |-----------|------|----------|----------|----------|-------------|
-| parseEvtx (full pipeline) | 25 | 1564.07 | 1514.92 | 1732.55 | 1555.09 |
-| parseFileHeader | 2722897 | 0.00 | 0.00 | 0.05 | 0.00 |
-| discoverChunkOffsets | 294026 | 0.00 | 0.00 | 0.87 | 0.00 |
-| parseChunk (all chunks) | 25 | 41.08 | 39.65 | 42.66 | 41.11 |
-| parseEventRecord (all records) | 25 | 1530.09 | 1494.01 | 1677.93 | 1517.86 |
-| preloadTemplateDefinitions (all chunks) | 25 | 51.43 | 48.77 | 66.68 | 50.30 |
-| BinXmlParser.parseDocument (all records) | 25 | 1201.30 | 1147.84 | 1495.75 | 1163.58 |
-| parseEventXml (all records) | 25 | 250.24 | 232.77 | 413.39 | 236.70 |
+| parseEvtx (full pipeline) | 25 | 772.24 | 749.77 | 823.66 | 766.41 |
+| parseFileHeader | 2761436 | 0.00 | 0.00 | 0.04 | 0.00 |
+| discoverChunkOffsets | 297315 | 0.00 | 0.00 | 0.47 | 0.00 |
+| parseChunk (all chunks) | 25 | 41.38 | 40.04 | 43.44 | 41.38 |
+| parseEventRecord (all records) | 25 | 738.19 | 724.80 | 774.08 | 732.08 |
+| preloadTemplateDefinitions (all chunks) | 25 | 50.13 | 48.45 | 52.57 | 49.85 |
+| BinXmlParser.parseDocument (all records) | 25 | 402.74 | 394.58 | 406.41 | 403.07 |
+| parseEventXml (all records) | 25 | 236.24 | 229.90 | 319.65 | 231.90 |
 

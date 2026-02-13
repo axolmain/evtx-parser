@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ArchiveArchiveIdRouteImport } from './routes/archive/$archiveId'
 import { Route as ArchiveArchiveIdIndexRouteImport } from './routes/archive/$archiveId/index'
-import { Route as ArchiveArchiveIdFileFileNameRouteImport } from './routes/archive/$archiveId/file/$fileName'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -29,46 +28,28 @@ const ArchiveArchiveIdIndexRoute = ArchiveArchiveIdIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ArchiveArchiveIdRoute,
 } as any)
-const ArchiveArchiveIdFileFileNameRoute =
-  ArchiveArchiveIdFileFileNameRouteImport.update({
-    id: '/file/$fileName',
-    path: '/file/$fileName',
-    getParentRoute: () => ArchiveArchiveIdRoute,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/archive/$archiveId': typeof ArchiveArchiveIdRouteWithChildren
   '/archive/$archiveId/': typeof ArchiveArchiveIdIndexRoute
-  '/archive/$archiveId/file/$fileName': typeof ArchiveArchiveIdFileFileNameRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/archive/$archiveId': typeof ArchiveArchiveIdIndexRoute
-  '/archive/$archiveId/file/$fileName': typeof ArchiveArchiveIdFileFileNameRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/archive/$archiveId': typeof ArchiveArchiveIdRouteWithChildren
   '/archive/$archiveId/': typeof ArchiveArchiveIdIndexRoute
-  '/archive/$archiveId/file/$fileName': typeof ArchiveArchiveIdFileFileNameRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/archive/$archiveId'
-    | '/archive/$archiveId/'
-    | '/archive/$archiveId/file/$fileName'
+  fullPaths: '/' | '/archive/$archiveId' | '/archive/$archiveId/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/archive/$archiveId' | '/archive/$archiveId/file/$fileName'
-  id:
-    | '__root__'
-    | '/'
-    | '/archive/$archiveId'
-    | '/archive/$archiveId/'
-    | '/archive/$archiveId/file/$fileName'
+  to: '/' | '/archive/$archiveId'
+  id: '__root__' | '/' | '/archive/$archiveId' | '/archive/$archiveId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -99,24 +80,15 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ArchiveArchiveIdIndexRouteImport
       parentRoute: typeof ArchiveArchiveIdRoute
     }
-    '/archive/$archiveId/file/$fileName': {
-      id: '/archive/$archiveId/file/$fileName'
-      path: '/file/$fileName'
-      fullPath: '/archive/$archiveId/file/$fileName'
-      preLoaderRoute: typeof ArchiveArchiveIdFileFileNameRouteImport
-      parentRoute: typeof ArchiveArchiveIdRoute
-    }
   }
 }
 
 interface ArchiveArchiveIdRouteChildren {
   ArchiveArchiveIdIndexRoute: typeof ArchiveArchiveIdIndexRoute
-  ArchiveArchiveIdFileFileNameRoute: typeof ArchiveArchiveIdFileFileNameRoute
 }
 
 const ArchiveArchiveIdRouteChildren: ArchiveArchiveIdRouteChildren = {
   ArchiveArchiveIdIndexRoute: ArchiveArchiveIdIndexRoute,
-  ArchiveArchiveIdFileFileNameRoute: ArchiveArchiveIdFileFileNameRoute,
 }
 
 const ArchiveArchiveIdRouteWithChildren =

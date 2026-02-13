@@ -49,12 +49,9 @@ export function GlobalSearch() {
 	const handleEventSelect = (event: StoredEvent) => {
 		spotlight.close()
 		router.navigate({
-			to: '/archive/$archiveId/file/$fileName',
-			params: {
-				archiveId: event.archiveId,
-				fileName: event.fileName
-			},
-			search: {event: event.recordId}
+			to: '/archive/$archiveId',
+			params: {archiveId: event.archiveId},
+			search: {file: event.fileName, event: event.recordId}
 		})
 	}
 

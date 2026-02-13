@@ -11,7 +11,7 @@ import {
 } from '@mantine/core'
 import { spotlight } from '@mantine/spotlight'
 import { IconRefresh, IconSearch } from '@tabler/icons-react'
-import { Outlet, createFileRoute, useParams, useRouter } from '@tanstack/react-router'
+import { Outlet, createFileRoute, useRouter, useSearch } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ZipFileBrowser } from '@/components/ZipFileBrowser'
 import { useCache } from '@/contexts/CacheContext'
@@ -27,14 +27,40 @@ export interface ArchiveFileEntry {
 	type: FileType
 }
 
+export interface ArchiveSearchParams {
+	file?: string
+	view?: string
+	search?: string
+	levels?: string
+	event?: number
+	page?: number
+	pageSize?: number
+	fieldsToExtract?: string
+}
+
 export const Route = createFileRoute('/archive/$archiveId')({
 	component: ArchiveLayout,
+	validateSearch: (search: Record<string, unknown>): ArchiveSearchParams => {
+		const params: ArchiveSearchParams = {}
+		if (search['file'] !== undefined) params.file = String(search['file'])
+		if (search['view'] !== undefined) params.view = String(search['view'])
+		if (search['search'] !== undefined) params.search = String(search['search'])
+		if (search['levels'] !== undefined) params.levels = String(search['levels'])
+		if (search['event'] !== undefined) params.event = Number(search['event'])
+		if (search['page'] !== undefined) params.page = Number(search['page'])
+		if (search['pageSize'] !== undefined)
+			params.pageSize = Number(search['pageSize'])
+		if (search['fieldsToExtract'] !== undefined)
+			params.fieldsToExtract = String(search['fieldsToExtract'])
+		return params
+	},
 })
 
 function ArchiveLayout() {
 	const router = useRouter()
-	const {archiveId, fileName} = useParams({strict: false}) as {archiveId: string; fileName?: string}
-	const currentFileName = fileName ?? null
+	const {archiveId} = Route.useParams()
+	const searchParams = useSearch({from: '/archive/$archiveId'})
+	const currentFileName = searchParams.file ?? null
 	const {clearCaches, cacheStats} = useCache()
 	const {setNavbarContent, openDesktop, closeMobile} = useNavbar()
 	const [archive, setArchive] = useState<Archive | null>(null)
@@ -78,8 +104,9 @@ function ArchiveLayout() {
 	const handleFileClick = useCallback(async (name: string) => {
 		closeMobile()
 		await router.navigate({
-			to: '/archive/$archiveId/file/$fileName',
-			params: {archiveId, fileName: name},
+			to: '/archive/$archiveId',
+			params: {archiveId},
+			search: {file: name},
 		})
 	}, [archiveId, closeMobile, router])
 
@@ -139,7 +166,6 @@ function ArchiveLayout() {
 
 	return (
 		<Stack gap="lg">
-			{/* Header section - now in main content area */}
 			<Group justify="space-between" wrap="wrap">
 				<Group gap="md">
 					<Title order={3}>SysInfoZip Viewer</Title>
@@ -195,7 +221,6 @@ function ArchiveLayout() {
 
 			<Divider />
 
-			{/* Child route content (FileViewPage or ArchiveIndex) */}
 			<Outlet />
 		</Stack>
 	)

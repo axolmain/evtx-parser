@@ -65,8 +65,9 @@ function HomePage() {
 					file
 				)
 				await router.navigate({
-					to: '/archive/$archiveId/file/$fileName',
-					params: {archiveId, fileName: file.name}
+					to: '/archive/$archiveId',
+					params: {archiveId},
+					search: {file: file.name}
 				})
 			} catch (error) {
 				setUploadMessage(

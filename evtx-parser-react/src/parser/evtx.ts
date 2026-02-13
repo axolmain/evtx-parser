@@ -319,6 +319,7 @@ export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
 	const chunkOffsets: number[] = discoverChunkOffsets(dv, fileHeader.headerBlockSize)
 
 	const tplStats: TemplateStats = {
+		compiled: new Map(),
 		definitions: {},
 		defsByOffset: {},
 		definitionCount: 0,
