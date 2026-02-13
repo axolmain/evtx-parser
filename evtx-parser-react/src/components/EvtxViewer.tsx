@@ -1,6 +1,6 @@
 import {Button, Divider, Group, Stack, Text} from '@mantine/core'
 import {IconLayoutList, IconTable} from '@tabler/icons-react'
-import {useEffect, useMemo, useRef, useState} from 'react'
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {useEvtxParser} from '@/hooks/useEvtxParser'
 import {usePagination} from '@/hooks/usePagination'
 import type {EvtxParseResult, ParsedEventRecord} from '@/parser'
@@ -110,6 +110,16 @@ export function EvtxViewer({
 	const effectiveParseTime = isParsedMode ? (propParseTime || 0) : (state.status === 'done' ? state.parseTime : 0)
 	const isDone = isParsedMode || state.status === 'done'
 
+	const buildXml = useCallback(() => {
+		if (records.length === 0) return ''
+		let xml = '<?xml version="1.0" encoding="utf-8"?>\n<Events>\n'
+		for (const r of records) {
+			xml += r.xml + '\n\n'
+		}
+		xml += '</Events>'
+		return xml
+	}, [records])
+
 	const filteredRecords = useMemo(() => {
 		if (records.length === 0) return records
 
@@ -196,11 +206,11 @@ export function EvtxViewer({
 
 					<Group gap='sm' style={{width: '100%'}}>
 						<WarningsPanel warnings={result.warnings} />
-						<CopyButton disabled={false} text={result.xml} />
+						<CopyButton disabled={false} getText={buildXml} />
 						<DownloadButton
 							disabled={false}
 							fileName={effectiveFileName}
-							text={result.xml}
+							getText={buildXml}
 						/>
 						<Text c='dimmed' ml='auto' size='sm'>
 							{filteredRecords.length} of {records.length} events

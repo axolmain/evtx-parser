@@ -4,18 +4,18 @@ import {useCallback} from 'react'
 interface Properties {
 	disabled?: boolean
 	fileName: string
-	text: string
+	getText: () => string
 }
 
-export function DownloadButton({text, fileName, disabled}: Properties) {
+export function DownloadButton({getText, fileName, disabled}: Properties) {
 	const handleClick = useCallback(() => {
-		const blob = new Blob([text], {type: 'application/xml'})
+		const blob = new Blob([getText()], {type: 'application/xml'})
 		const a = document.createElement('a')
 		a.href = URL.createObjectURL(blob)
 		a.download = `${fileName}-rawdump.xml`
 		a.click()
 		URL.revokeObjectURL(a.href)
-	}, [text, fileName])
+	}, [getText, fileName])
 
 	return (
 		<Button

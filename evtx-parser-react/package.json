@@ -16,7 +16,8 @@
 		"format": "biome format --write",
 		"validate": "npm run lint && npm run test:ci",
 		"build": "vite build",
-		"preview": "vite preview"
+		"preview": "vite preview",
+		"deploy": "gh-pages -d dist"
 	},
 	"dependencies": {
 		"@mantine/core": "^8.3.14",
@@ -55,8 +56,10 @@
 		"@types/node": "24.10.1",
 		"@types/react": "19.2.6",
 		"@types/react-dom": "19.2.3",
+		"@vite-pwa/assets-generator": "^1.0.2",
 		"@vitejs/plugin-react": "5.1.1",
 		"@vitest/coverage-v8": "4.0.13",
+		"gh-pages": "^6.3.0",
 		"happy-dom": "20.0.10",
 		"postcss": "^8.5.6",
 		"postcss-preset-mantine": "^1.18.0",

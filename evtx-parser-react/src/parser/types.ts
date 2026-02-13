@@ -121,13 +121,17 @@ export interface ParsedEventRecord {
 	readonly eventData: string
 }
 
+export interface TemplateStatsSummary {
+	readonly definitionCount: number
+	readonly missingCount: number
+	readonly parseErrorCount: number
+	readonly referenceCount: number
+}
+
 export interface EvtxParseResult {
 	readonly numChunks: number
-	readonly recordOutputs: string[]
 	readonly records: ParsedEventRecord[]
-	readonly summary: string
 	readonly totalRecords: number
-	readonly tplStats: TemplateStats
+	readonly tplStats: TemplateStatsSummary
 	readonly warnings: string[]
-	readonly xml: string
 }

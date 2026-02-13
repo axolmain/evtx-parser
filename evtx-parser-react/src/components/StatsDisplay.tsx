@@ -1,12 +1,12 @@
 import {Text} from '@mantine/core'
-import type {TemplateStats} from '@/parser'
+import type {TemplateStatsSummary} from '@/parser'
 
 interface Properties {
 	fileSize: number
 	numChunks: number
 	parseTime: number
 	totalRecords: number
-	tplStats: TemplateStats
+	tplStats: TemplateStatsSummary
 }
 
 export function StatsDisplay({
@@ -21,8 +21,8 @@ export function StatsDisplay({
 	if (tplStats.missingCount > 0) {
 		text += ` · ${tplStats.missingCount} missing!`
 	}
-	if (tplStats.parseErrors.length > 0) {
-		text += ` · ${tplStats.parseErrors.length} errors`
+	if (tplStats.parseErrorCount > 0) {
+		text += ` · ${tplStats.parseErrorCount} errors`
 	}
 
 	return (

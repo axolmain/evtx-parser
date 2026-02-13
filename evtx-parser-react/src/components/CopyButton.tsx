@@ -3,16 +3,16 @@ import {useClipboard} from '@mantine/hooks'
 
 interface Properties {
 	disabled?: boolean
-	text: string
+	getText: () => string
 }
 
-export function CopyButton({text, disabled}: Properties) {
+export function CopyButton({getText, disabled}: Properties) {
 	const clipboard = useClipboard({timeout: 1500})
 
 	return (
 		<Button
 			disabled={disabled ?? false}
-			onClick={() => clipboard.copy(text)}
+			onClick={() => clipboard.copy(getText())}
 			size='sm'
 			variant='default'
 		>

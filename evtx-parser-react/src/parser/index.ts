@@ -21,5 +21,6 @@ export type {
 	TemplateMissingRef,
 	TemplateParseError,
 	TemplateReference,
-	TemplateStats
+	TemplateStats,
+	TemplateStatsSummary
 } from './types'

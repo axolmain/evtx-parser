@@ -333,7 +333,6 @@ export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
 
 	let totalRecords = 0
 	const allChunkWarnings: string[] = []
-	const recordOutputs: string[] = []
 	const parsedRecords: ParsedEventRecord[] = []
 
 	// parse the chunks
@@ -347,8 +346,6 @@ export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
 			allChunkWarnings.push(w)
 		}
 
-		// const chunkHeaderText = `${formatChunkHeaderComment(ci, chunk.header)}\n\n`
-
 		const chunkDv = new DataView(buffer, chunkOffset, 65_536)
 
 		preloadTemplateDefinitions(chunkDv, chunk.header, tplStats)
@@ -360,81 +357,25 @@ export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
 			const r = chunk.records[ri]!
 			tplStats.currentRecordId = r.recordId
 
-			const { xml, record } = parseEventRecord(
+			const { record } = parseEventRecord(
 				r, chunkDv, chunk.header, tplStats, ci, parser
 			)
-			recordOutputs.push(xml)
 			parsedRecords.push(record)
 		}
 
 		totalRecords += chunk.records.length
 	}
 
-	// Build summary
-	const summary: string[] = []
-	summary.push('<?xml version="1.0" encoding="utf-8"?>')
-	// summary.push('<!-- ═══════════════════════════════════════════')
-	// summary.push('   EVTX Parse Summary')
-	// const fileFlags: string[] = []
-	// if (fileHeader.isDirty) fileFlags.push('DIRTY')
-	// if (fileHeader.isFull) fileFlags.push('FULL')
-	// summary.push(
-	// 	`   File flags:          ${hex32(fileHeader.flags)}${fileFlags.length > 0 ? ` (${fileFlags.join(', ')})` : ' (clean)'}`
-	// )
-	// summary.push(`   Chunks:              ${chunkOffsets.length}`)
-	// summary.push(`   Total records:       ${totalRecords}`)
-	// summary.push(`   Template definitions: ${tplStats.definitionCount}`)
-	// summary.push(`   Template references:  ${tplStats.referenceCount}`)
-	// summary.push(`   Missing templates:    ${tplStats.missingCount}`)
-	// summary.push(`   Parse errors:         ${tplStats.parseErrors.length}`)
-
-	// if (tplStats.definitionCount > 0) {
-	// 	summary.push('')
-	// 	summary.push('   Defined templates:')
-	// 	const guids = Object.keys(tplStats.definitions)
-	// 	for (const guid of guids) {
-	// 		const d = tplStats.definitions[guid]
-	// 		if (!d) continue
-	// 		let refCount = 0
-	// 		for (const ref of tplStats.references) {
-	// 			if (ref.guid === guid) refCount++
-	// 		}
-	// 		summary.push(
-	// 			`     ${d.guid}  offset=${hex32(d.defDataOffset)}  size=${d.dataSize}  refs=${refCount}  first=record ${d.firstSeenRecord}`
-	// 		)
-	// 	}
-	// }
-
-	// if (tplStats.missingCount > 0) {
-	// 	summary.push('')
-	// 	summary.push('   Missing template references:')
-	// 	for (const m of tplStats.missingRefs) {
-	// 		summary.push(
-	// 			`     record ${m.recordId}: guid=${m.guid}  defOffset=${hex32(m.defDataOffset)}`
-	// 		)
-	// 	}
-	// }
-
-	// if (tplStats.parseErrors.length > 0) {
-	// 	summary.push('')
-	// 	summary.push('   Parse errors:')
-	// 	for (const e of tplStats.parseErrors) {
-	// 		summary.push(`     record ${e.recordId}: ${e.error}`)
-	// 	}
-	// }
-
-	// summary.push('   ═══════════════════════════════════════════ -->')
-	summary.push('<Events>\n')
-
-	const summaryText = summary.join('\n')
 	return {
-		summary: summaryText,
-		recordOutputs,
 		records: parsedRecords,
-		xml: `${summaryText}${recordOutputs.join('\n\n')}\n\n</Events>`,
 		totalRecords,
 		numChunks: chunkOffsets.length,
 		warnings: allChunkWarnings,
-		tplStats
+		tplStats: {
+			definitionCount: tplStats.definitionCount,
+			referenceCount: tplStats.referenceCount,
+			missingCount: tplStats.missingCount,
+			parseErrorCount: tplStats.parseErrors.length,
+		}
 	}
 }
