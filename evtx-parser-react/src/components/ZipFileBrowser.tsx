@@ -17,6 +17,7 @@ import {
 	IconJson,
 	IconQuestionMark
 } from '@tabler/icons-react'
+import {useMemo} from 'react'
 import type {FileType} from '@/lib/fileTypes'
 
 export interface FileEntry {
@@ -117,12 +118,24 @@ export function ZipFileBrowser({
 	onFileClick,
 	loadingFile = null
 }: ZipFileBrowserProps) {
-	// Group files by type
-	const evtxFiles: FileEntry[] = entries.filter(e => e.type === 'evtx')
-	const jsonFiles: FileEntry[] = entries.filter(e => e.type === 'json')
-	const xmlFiles: FileEntry[] = entries.filter(e => e.type === 'xml')
-	const txtFiles: FileEntry[] = entries.filter(e => e.type === 'txt')
-	const unknownFiles: FileEntry[] = entries.filter(e => e.type === 'unknown')
+	// Single-pass grouping, stable across re-renders when entries unchanged
+	const {evtxFiles, jsonFiles, xmlFiles, txtFiles, unknownFiles} = useMemo(() => {
+		const evtx: FileEntry[] = []
+		const json: FileEntry[] = []
+		const xml: FileEntry[] = []
+		const txt: FileEntry[] = []
+		const unknown: FileEntry[] = []
+		for (const e of entries) {
+			switch (e.type) {
+				case 'evtx': evtx.push(e); break
+				case 'json': json.push(e); break
+				case 'xml': xml.push(e); break
+				case 'txt': txt.push(e); break
+				default: unknown.push(e); break
+			}
+		}
+		return {evtxFiles: evtx, jsonFiles: json, xmlFiles: xml, txtFiles: txt, unknownFiles: unknown}
+	}, [entries])
 
 	return (
 		<Stack gap="md" style={{height: '100%'}}>

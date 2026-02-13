@@ -11,8 +11,8 @@ import {
 } from '@mantine/core'
 import { spotlight } from '@mantine/spotlight'
 import { IconRefresh, IconSearch } from '@tabler/icons-react'
-import { Outlet, useParams, useRouter } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
+import { Outlet, createFileRoute, useParams, useRouter } from '@tanstack/react-router'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ZipFileBrowser } from '@/components/ZipFileBrowser'
 import { useCache } from '@/contexts/CacheContext'
 import { useNavbar } from '@/contexts/NavbarContext'
@@ -27,16 +27,23 @@ export interface ArchiveFileEntry {
 	type: FileType
 }
 
-export function ArchiveLayout() {
+export const Route = createFileRoute('/archive/$archiveId')({
+	component: ArchiveLayout,
+})
+
+function ArchiveLayout() {
 	const router = useRouter()
-	const {archiveId} = useParams({strict: false}) as {archiveId: string}
+	const {archiveId, fileName} = useParams({strict: false}) as {archiveId: string; fileName?: string}
+	const currentFileName = fileName ?? null
 	const {clearCaches, cacheStats} = useCache()
-	const {setNavbarContent, closeMobile} = useNavbar()
+	const {setNavbarContent, openDesktop, closeMobile} = useNavbar()
 	const [archive, setArchive] = useState<Archive | null>(null)
 	const [entries, setEntries] = useState<ArchiveFileEntry[]>([])
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState<string | null>(null)
-	const [currentFileName, setCurrentFileName] = useState<string | null>(null)
+
+	// Open the sidebar when entering an archive
+	useEffect(() => { openDesktop() }, [openDesktop])
 
 	useEffect(() => {
 		async function loadArchive() {
@@ -68,27 +75,15 @@ export function ArchiveLayout() {
 		loadArchive()
 	}, [archiveId])
 
-	// Track current file from URL - use window.location since we're in hash routing
-	useEffect(() => {
-		const hash = window.location.hash
-		const fileMatch = /\/file\/(.+?)(?:\?|$)/.exec(hash)
-		if (fileMatch?.[1]) {
-			setCurrentFileName(decodeURIComponent(fileMatch[1]))
-		} else {
-			setCurrentFileName(null)
-		}
-	})
-
-	const handleFileClick = async (fileName: string) => {
-		setCurrentFileName(fileName)
-		closeMobile() // Auto-close navbar on mobile
+	const handleFileClick = useCallback(async (name: string) => {
+		closeMobile()
 		await router.navigate({
 			to: '/archive/$archiveId/file/$fileName',
-			params: {archiveId, fileName},
+			params: {archiveId, fileName: name},
 		})
-	}
+	}, [archiveId, closeMobile, router])
 
-	// Set navbar content when entries load
+	// Set navbar content when entries load or current file changes
 	useEffect(() => {
 		if (!loading && !error && entries.length > 0) {
 			setNavbarContent(
@@ -100,11 +95,20 @@ export function ArchiveLayout() {
 			)
 		}
 
-		// Clear navbar when component unmounts
 		return () => setNavbarContent(null)
-	}, [entries, currentFileName, loading, error, setNavbarContent])
+	}, [entries, currentFileName, loading, error, setNavbarContent, handleFileClick])
 
 	const stats = cacheStats()
+
+	const counts = useMemo(() => {
+		let evtx = 0, json = 0, txt = 0
+		for (const e of entries) {
+			if (e.type === 'evtx') evtx++
+			else if (e.type === 'json') json++
+			else if (e.type === 'txt') txt++
+		}
+		return {evtx, json, txt}
+	}, [entries])
 
 	if (loading) {
 		return (
@@ -133,10 +137,6 @@ export function ArchiveLayout() {
 		)
 	}
 
-	const evtxCount = entries.filter((e) => e.type === 'evtx').length
-	const jsonCount = entries.filter((e) => e.type === 'json').length
-	const txtCount = entries.filter((e) => e.type === 'txt').length
-
 	return (
 		<Stack gap="lg">
 			{/* Header section - now in main content area */}
@@ -151,9 +151,9 @@ export function ArchiveLayout() {
 				<Group gap="sm">
 					<Text c="dimmed" size="sm">
 						{entries.length} files
-						{evtxCount > 0 && ` • ${evtxCount} EVTX`}
-						{jsonCount > 0 && ` • ${jsonCount} JSON`}
-						{txtCount > 0 && ` • ${txtCount} TXT`}
+						{counts.evtx > 0 && ` • ${counts.evtx} EVTX`}
+						{counts.json > 0 && ` • ${counts.json} JSON`}
+						{counts.txt > 0 && ` • ${counts.txt} TXT`}
 					</Text>
 				</Group>
 			</Group>
@@ -198,15 +198,5 @@ export function ArchiveLayout() {
 			{/* Child route content (FileViewPage or ArchiveIndex) */}
 			<Outlet />
 		</Stack>
-	)
-}
-
-export function ArchiveIndex() {
-	return (
-		<Box p='4rem'>
-			<Text c='dimmed' size='lg' ta='center'>
-				Select a file from the sidebar to view its contents
-			</Text>
-		</Box>
 	)
 }

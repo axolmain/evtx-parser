@@ -1,13 +1,39 @@
 import {Box, Loader, Stack, Text} from '@mantine/core'
 import {IconAlertCircle} from '@tabler/icons-react'
-import {useParams, useSearch} from '@tanstack/react-router'
+import {createFileRoute, useParams, useSearch} from '@tanstack/react-router'
 import {EvtxViewer} from '@/components/EvtxViewer'
 import {JsonViewer} from '@/components/JsonViewer'
 import {TextViewer} from '@/components/TextViewer'
 import type {EvtxCacheData} from '@/contexts/CacheContext'
 import {useFileLoader} from '@/hooks/useFileLoader'
 import {detectFileType} from '@/lib/fileTypes'
-import type {FileSearchParams} from '@/router'
+
+export interface FileSearchParams {
+	view?: string
+	search?: string
+	levels?: string
+	event?: number
+	page?: number
+	pageSize?: number
+	fieldsToExtract?: string
+}
+
+export const Route = createFileRoute('/archive/$archiveId/file/$fileName')({
+	component: FileViewPage,
+	validateSearch: (search: Record<string, unknown>): FileSearchParams => {
+		const params: FileSearchParams = {}
+		if (search['view'] !== undefined) params.view = String(search['view'])
+		if (search['search'] !== undefined) params.search = String(search['search'])
+		if (search['levels'] !== undefined) params.levels = String(search['levels'])
+		if (search['event'] !== undefined) params.event = Number(search['event'])
+		if (search['page'] !== undefined) params.page = Number(search['page'])
+		if (search['pageSize'] !== undefined)
+			params.pageSize = Number(search['pageSize'])
+		if (search['fieldsToExtract'] !== undefined)
+			params.fieldsToExtract = String(search['fieldsToExtract'])
+		return params
+	},
+})
 
 function UnsupportedFileViewer({fileName}: {fileName: string}) {
 	return (
@@ -24,7 +50,7 @@ function UnsupportedFileViewer({fileName}: {fileName: string}) {
 	)
 }
 
-export function FileViewPage() {
+function FileViewPage() {
 	const {archiveId, fileName} = useParams({strict: false}) as {
 		archiveId: string
 		fileName: string

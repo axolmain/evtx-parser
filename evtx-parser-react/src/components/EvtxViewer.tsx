@@ -1,9 +1,9 @@
 import {Button, Divider, Group, Stack, Text} from '@mantine/core'
 import {IconLayoutList, IconTable} from '@tabler/icons-react'
-import {useEffect, useMemo, useState} from 'react'
+import {useEffect, useMemo, useRef, useState} from 'react'
 import {useEvtxParser} from '@/hooks/useEvtxParser'
 import {usePagination} from '@/hooks/usePagination'
-import type {EvtxParseResult} from '@/parser'
+import type {EvtxParseResult, ParsedEventRecord} from '@/parser'
 import {CopyButton} from './CopyButton'
 import {DownloadButton} from './DownloadButton'
 import {EventFilters} from './EventFilters'
@@ -89,28 +89,32 @@ export function EvtxViewer({
 		}
 	}, [file, isParsedMode, parseFile])
 
+	// Fire onParseComplete once when parsing finishes (not on every state change)
+	const notifiedRef = useRef(false)
 	useEffect(() => {
-		if (state.status === 'done' && onParseComplete && !isParsedMode) {
+		if (state.status === 'done' && onParseComplete && !isParsedMode && !notifiedRef.current) {
+			notifiedRef.current = true
 			onParseComplete(state.result, state.fileName)
 		}
-	}, [state, onParseComplete, isParsedMode])
+	}, [state.status, state.result, state.fileName, onParseComplete, isParsedMode])
 
-	const effectiveState = isParsedMode
-		? {
-				status: 'done' as const,
-				result: parsedResult,
-				fileName: propFileName || 'unknown',
-				fileSize: propFileSize || 0,
-				parseTime: propParseTime || 0
-			}
-		: state
+	// Stable references for the two paths — avoids new object literal every render
+	const records: ParsedEventRecord[] = isParsedMode
+		? parsedResult.records
+		: state.status === 'done' ? state.result.records : []
+	const result: EvtxParseResult | null = isParsedMode
+		? parsedResult
+		: state.status === 'done' ? state.result : null
+	const effectiveFileName = isParsedMode ? (propFileName || 'unknown') : (state.status === 'done' ? state.fileName : '')
+	const effectiveFileSize = isParsedMode ? (propFileSize || 0) : (state.status === 'done' ? state.fileSize : 0)
+	const effectiveParseTime = isParsedMode ? (propParseTime || 0) : (state.status === 'done' ? state.parseTime : 0)
+	const isDone = isParsedMode || state.status === 'done'
 
 	const filteredRecords = useMemo(() => {
-		if (effectiveState.status !== 'done') return []
+		if (records.length === 0) return records
 
-		let filtered = effectiveState.result.records
-
-		filtered = filtered.filter(r => selectedLevels.includes(r.level))
+		const levelsSet = new Set(selectedLevels)
+		let filtered = records.filter(r => levelsSet.has(r.level))
 
 		if (searchQuery.trim()) {
 			const query = searchQuery.toLowerCase()
@@ -125,16 +129,15 @@ export function EvtxViewer({
 		}
 
 		return filtered
-	}, [effectiveState, searchQuery, selectedLevels])
+	}, [records, searchQuery, selectedLevels])
 
 	const levelCounts = useMemo(() => {
-		if (effectiveState.status !== 'done') return {}
 		const counts: Record<number, number> = {}
-		for (const record of effectiveState.result.records) {
+		for (const record of records) {
 			counts[record.level] = (counts[record.level] || 0) + 1
 		}
 		return counts
-	}, [effectiveState])
+	}, [records])
 
 	const totalRecords = filteredRecords.length
 	const pagination = usePagination(totalRecords)
@@ -147,18 +150,18 @@ export function EvtxViewer({
 	return (
 		<Stack align='center' gap='md'>
 			{!isParsedMode && (
-				<ProgressBar progress={getProgress(effectiveState.status)} />
+				<ProgressBar progress={getProgress(state.status)} />
 			)}
 			{!isParsedMode && (
 				<StatusMessage
-					message={getStatusMessage(effectiveState)}
-					type={getStatusType(effectiveState)}
+					message={getStatusMessage(state)}
+					type={getStatusType(state)}
 				/>
 			)}
 
-			{effectiveState.status === 'done' && (
+			{isDone && result && (
 				<>
-					<EventSummary records={effectiveState.result.records} />
+					<EventSummary records={records} />
 
 					<Divider style={{width: '100%'}} />
 
@@ -192,12 +195,12 @@ export function EvtxViewer({
 					</Group>
 
 					<Group gap='sm' style={{width: '100%'}}>
-						<WarningsPanel warnings={effectiveState.result.warnings} />
-						<CopyButton disabled={false} text={effectiveState.result.xml} />
+						<WarningsPanel warnings={result.warnings} />
+						<CopyButton disabled={false} text={result.xml} />
 						<DownloadButton
 							disabled={false}
-							fileName={effectiveState.fileName}
-							text={effectiveState.result.xml}
+							fileName={effectiveFileName}
+							text={result.xml}
 						/>
 						<Text c='dimmed' ml='auto' size='sm'>
 							Showing {displayRecords.length} of {filteredRecords.length} events
@@ -221,11 +224,11 @@ export function EvtxViewer({
 
 					<Group justify='space-between' style={{width: '100%'}}>
 						<StatsDisplay
-							fileSize={effectiveState.fileSize}
-							numChunks={effectiveState.result.numChunks}
-							parseTime={effectiveState.parseTime}
-							totalRecords={effectiveState.result.totalRecords}
-							tplStats={effectiveState.result.tplStats}
+							fileSize={effectiveFileSize}
+							numChunks={result.numChunks}
+							parseTime={effectiveParseTime}
+							totalRecords={result.totalRecords}
+							tplStats={result.tplStats}
 						/>
 						{pagination.showPagination && (
 							<PaginationBar

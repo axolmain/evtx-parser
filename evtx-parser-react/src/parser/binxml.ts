@@ -232,7 +232,7 @@ export class BinXmlParser {
 				return `0x${this.chunkDv.getBigUint64(vOff, true).toString(16).padStart(16, '0')}`
 			case VALUE_TYPE.BINXML: {
 				const embeddedChunkBase = valueBytes.byteOffset - this.chunkDv.byteOffset
-				return this.parseDocument(valueBytes, this.chunkStart, embeddedChunkBase)
+				return this.parseDocument(valueBytes, embeddedChunkBase)
 			}
 			default: {
 				let hex = ''
@@ -594,7 +594,6 @@ export class BinXmlParser {
 
 	parseDocument(
 		binxml: Uint8Array,
-		chunkStart: number,
 		binxmlChunkBase: number
 	): string {
 		const pos: ParsePosition = {offset: 0}
@@ -667,11 +666,10 @@ export class BinXmlParser {
 export function parseBinXmlDocument(
 	binxml: Uint8Array,
 	chunkDv: DataView,
-	chunkStart: number,
 	chunkHeader: ChunkHeader | null,
 	tplStats: TemplateStats,
 	binxmlChunkBase: number
 ): string {
 	return new BinXmlParser(chunkDv, chunkHeader, tplStats)
-		.parseDocument(binxml, chunkStart, binxmlChunkBase)
+		.parseDocument(binxml, binxmlChunkBase)
 }

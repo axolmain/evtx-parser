@@ -1,6 +1,7 @@
 import {
 	createContext,
 	useContext,
+	useMemo,
 	useState,
 	type ReactNode,
 } from 'react'
@@ -12,6 +13,7 @@ interface NavbarContextType {
 	mobileOpened: boolean
 	toggleMobile: () => void
 	desktopOpened: boolean
+	openDesktop: () => void
 	toggleDesktop: () => void
 	closeMobile: () => void
 }
@@ -21,20 +23,21 @@ const NavbarContext = createContext<NavbarContextType | null>(null)
 export function NavbarProvider({children}: {children: ReactNode}) {
 	const [navbarContent, setNavbarContent] = useState<ReactNode | null>(null)
 	const [mobileOpened, {toggle: toggleMobile, close: closeMobile}] = useDisclosure()
-	const [desktopOpened, {toggle: toggleDesktop}] = useDisclosure()
+	const [desktopOpened, {toggle: toggleDesktop, open: openDesktop}] = useDisclosure()
+
+	const value = useMemo(() => ({
+		navbarContent,
+		setNavbarContent,
+		mobileOpened,
+		toggleMobile,
+		desktopOpened,
+		openDesktop,
+		toggleDesktop,
+		closeMobile,
+	}), [navbarContent, mobileOpened, desktopOpened, toggleMobile, toggleDesktop, openDesktop, closeMobile])
 
 	return (
-		<NavbarContext.Provider
-			value={{
-				navbarContent,
-				setNavbarContent,
-				mobileOpened,
-				toggleMobile,
-				desktopOpened,
-				toggleDesktop,
-				closeMobile,
-			}}
-		>
+		<NavbarContext.Provider value={value}>
 			{children}
 		</NavbarContext.Provider>
 	)

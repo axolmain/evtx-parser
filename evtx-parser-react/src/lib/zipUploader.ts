@@ -10,6 +10,8 @@ export interface ZipFileEntry {
 	type: FileType
 }
 
+const EXTRACT_CONCURRENCY = 6
+
 export async function uploadZipFile(
 	file: File,
 	onProgress?: (message: string) => void
@@ -25,16 +27,23 @@ export async function uploadZipFile(
 			throw new Error('Zip file is empty')
 		}
 
-		const fileEntries: ZipFileEntry[] = entries
-			.filter(entry => !entry.directory && entry.filename)
-			.map(entry => ({
+		// Single pass: build metadata, count viewable, accumulate totalSize
+		const rawEntries = entries.filter(e => !e.directory && e.filename)
+		const fileEntries: ZipFileEntry[] = []
+		let totalSize = 0
+		let viewableCount = 0
+
+		for (const entry of rawEntries) {
+			const type = detectFileType(entry.filename)
+			fileEntries.push({
 				name: entry.filename,
 				size: entry.uncompressedSize,
 				compressedSize: entry.compressedSize || 0,
-				type: detectFileType(entry.filename)
-			}))
-
-		const viewableCount = fileEntries.filter(e => e.type !== 'unknown').length
+				type
+			})
+			totalSize += entry.uncompressedSize
+			if (type !== 'unknown') viewableCount++
+		}
 
 		if (viewableCount === 0) {
 			throw new Error(
@@ -45,29 +54,36 @@ export async function uploadZipFile(
 		}
 
 		onProgress?.('Saving archive...')
-
-		const totalSize = fileEntries.reduce((sum, e) => sum + e.size, 0)
 		const archiveId = await dbService.saveArchive(file.name, totalSize, [])
 
-		// Extract and save all files to IndexedDB
-		const rawEntries = entries.filter(e => !e.directory && e.filename)
-		for (const entry of rawEntries) {
-			try {
-				if (!('getData' in entry) || typeof entry.getData !== 'function') {
-					continue
-				}
-
-				onProgress?.(`Extracting ${entry.filename}...`)
-				const blob = await entry.getData(new BlobWriter())
-				await dbService.saveFile(
-					archiveId,
-					entry.filename,
-					detectFileType(entry.filename),
-					entry.uncompressedSize,
-					blob
-				)
-			} catch {}
+		// Extract and save files concurrently
+		let next = 0
+		async function worker() {
+			while (next < rawEntries.length) {
+				const i = next++
+				const entry = rawEntries[i]!
+				const meta = fileEntries[i]!
+				if (typeof entry.getData !== 'function') continue
+				try {
+					onProgress?.(`Extracting ${entry.filename}...`)
+					const blob = await entry.getData(new BlobWriter())
+					await dbService.saveFile(
+						archiveId,
+						meta.name,
+						meta.type,
+						meta.size,
+						blob
+					)
+				} catch {}
+			}
 		}
+
+		await Promise.all(
+			Array.from(
+				{length: Math.min(EXTRACT_CONCURRENCY, rawEntries.length)},
+				() => worker()
+			)
+		)
 
 		return {archiveId, entries: fileEntries}
 	} finally {

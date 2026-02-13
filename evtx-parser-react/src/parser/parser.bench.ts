@@ -105,7 +105,7 @@ if (evtxFiles.length === 0) {
 				timed(group, 'parseEvtx (full pipeline)', () => {
 					parseEvtx(file.buffer)
 				})
-			})
+			}, { warmupIterations: 3, iterations: 20 })
 
 			bench('parseFileHeader', () => {
 				timed(group, 'parseFileHeader', () => {
@@ -130,7 +130,7 @@ if (evtxFiles.length === 0) {
 						parseChunk(file.buffer, dv, off)
 					}
 				})
-			})
+			}, { warmupIterations: 3, iterations: 20 })
 
 			bench('parseEventRecord (all records)', () => {
 				timed(group, 'parseEventRecord (all records)', () => {
@@ -156,11 +156,11 @@ if (evtxFiles.length === 0) {
 						preloadTemplateDefinitions(chunkDv, chunk.header, tplStats)
 						for (const r of chunk.records) {
 							tplStats.currentRecordId = r.recordId
-							parseEventRecord(r, chunkDv, chunkOffset, chunk.header, tplStats, ci)
+							parseEventRecord(r, chunkDv, chunk.header, tplStats, ci)
 						}
 					}
 				})
-			})
+			}, { warmupIterations: 3, iterations: 20 })
 
 			// --- Granular breakdowns of parseEventRecord ---
 
@@ -187,7 +187,7 @@ if (evtxFiles.length === 0) {
 						preloadTemplateDefinitions(chunkDv, chunk.header, tplStats)
 					}
 				})
-			})
+			}, { warmupIterations: 3, iterations: 20 })
 
 			bench('BinXmlParser.parseDocument (all records)', () => {
 				timed(group, 'BinXmlParser.parseDocument (all records)', () => {
@@ -214,11 +214,11 @@ if (evtxFiles.length === 0) {
 						for (const r of chunk.records) {
 							tplStats.currentRecordId = r.recordId
 							const binxmlChunkBase = r.chunkOffset + 24
-							parser.parseDocument(r.binxmlBytes, chunkOffset, binxmlChunkBase)
+							parser.parseDocument(r.binxmlBytes, binxmlChunkBase)
 						}
 					}
 				})
-			})
+			}, { warmupIterations: 3, iterations: 20 })
 
 			// Pre-parse all XML strings once so parseEventXml bench only measures field extraction
 			const precomputedXml: string[] = (() => {
@@ -247,7 +247,7 @@ if (evtxFiles.length === 0) {
 						tplStats.currentRecordId = r.recordId
 						const binxmlChunkBase = r.chunkOffset + 24
 						try {
-							xmlStrings.push(parser.parseDocument(r.binxmlBytes, chunkOffset, binxmlChunkBase))
+							xmlStrings.push(parser.parseDocument(r.binxmlBytes, binxmlChunkBase))
 						} catch {
 							xmlStrings.push('')
 						}
@@ -262,7 +262,7 @@ if (evtxFiles.length === 0) {
 						if (xml) parseEventXml(xml)
 					}
 				})
-			})
+			}, { warmupIterations: 3, iterations: 20 })
 		})
 	}
 }

@@ -1,10 +1,10 @@
-import {Outlet, useMatches} from '@tanstack/react-router'
+import {Outlet, createRootRoute, useMatches} from '@tanstack/react-router'
 import {AppShellWrapper} from '@/components/AppShellWrapper'
 import {GlobalSearch} from '@/components/GlobalSearch'
 import {PWAPrompt} from '@/components/PWAPrompt'
 import {useNavbar} from '@/contexts/NavbarContext'
 
-export function RootLayout() {
+function RootLayout() {
 	const matches = useMatches()
 	const isArchiveRoute = matches.some((match) =>
 		match.pathname.startsWith('/archive/'),
@@ -24,3 +24,7 @@ export function RootLayout() {
 		</>
 	)
 }
+
+export const Route = createRootRoute({
+	component: RootLayout,
+})

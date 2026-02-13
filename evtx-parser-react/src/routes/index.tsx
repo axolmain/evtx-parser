@@ -1,16 +1,19 @@
 import { Box, Divider, Loader, Stack, Text, Title } from '@mantine/core'
 import { Dropzone } from '@mantine/dropzone'
-import { useRouter } from '@tanstack/react-router'
+import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { ArchiveManager } from '@/components/ArchiveManager'
-import { useStandaloneFile } from '@/contexts/StandaloneFileContext'
 import type { Archive } from '@/db/schema'
 import * as dbService from '@/db/service'
+import { detectFileType } from '@/lib/fileTypes'
 import { uploadZipFile } from '@/lib/zipUploader'
 
-export function HomePage() {
+export const Route = createFileRoute('/')({
+	component: HomePage,
+})
+
+function HomePage() {
 	const router = useRouter()
-	const {setFile} = useStandaloneFile()
 	const [isUploading, setIsUploading] = useState(false)
 	const [uploadMessage, setUploadMessage] = useState('')
 	const [archives, setArchives] = useState<Archive[]>([])
@@ -50,8 +53,28 @@ export function HomePage() {
 			fileName.endsWith('.xml') ||
 			fileName.endsWith('.json')
 		) {
-			setFile(file)
-			await router.navigate({to: '/standalone'})
+			setIsUploading(true)
+			setUploadMessage(`Saving ${file.name}...`)
+			try {
+				const archiveId = await dbService.saveArchive(file.name, file.size, [])
+				await dbService.saveFile(
+					archiveId,
+					file.name,
+					detectFileType(file.name),
+					file.size,
+					file
+				)
+				await router.navigate({
+					to: '/archive/$archiveId/file/$fileName',
+					params: {archiveId, fileName: file.name}
+				})
+			} catch (error) {
+				setUploadMessage(
+					`Error: ${error instanceof Error ? error.message : String(error)}`
+				)
+			} finally {
+				setIsUploading(false)
+			}
 		}
 	}
 

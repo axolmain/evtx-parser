@@ -277,7 +277,6 @@ export function preloadTemplateDefinitions(
 export function parseEventRecord(
 	r: EvtxRecord,
 	chunkDv: DataView,
-	chunkOffset: number,
 	header: ChunkHeader,
 	tplStats: TemplateStats,
 	chunkIndex: number,
@@ -290,7 +289,6 @@ export function parseEventRecord(
 	try {
 		parsedXml = p.parseDocument(
 			r.binxmlBytes,
-			chunkOffset,
 			binxmlChunkBase
 		)
 	} catch (e) {
@@ -362,7 +360,7 @@ export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
 			tplStats.currentRecordId = r.recordId
 
 			const { xml, record } = parseEventRecord(
-				r, chunkDv, chunkOffset, chunk.header, tplStats, ci, parser
+				r, chunkDv, chunk.header, tplStats, ci, parser
 			)
 			recordOutputs.push(xml)
 			parsedRecords.push(record)

@@ -3,7 +3,6 @@ import {RouterProvider} from '@tanstack/react-router'
 import {ErrorBoundary, type FallbackProps} from 'react-error-boundary'
 import {CacheProvider} from '@/contexts/CacheContext'
 import {NavbarProvider} from '@/contexts/NavbarContext'
-import {StandaloneFileProvider} from '@/contexts/StandaloneFileContext'
 import {router} from '@/router'
 import '@mantine/core/styles.css'
 import '@mantine/dropzone/styles.css'
@@ -26,11 +25,9 @@ export function App() {
 		<MantineProvider defaultColorScheme='dark'>
 			<ErrorBoundary fallbackRender={renderError}>
 				<CacheProvider>
-					<StandaloneFileProvider>
-						<NavbarProvider>
-							<RouterProvider router={router} />
-						</NavbarProvider>
-					</StandaloneFileProvider>
+					<NavbarProvider>
+						<RouterProvider router={router} />
+					</NavbarProvider>
 				</CacheProvider>
 			</ErrorBoundary>
 		</MantineProvider>
