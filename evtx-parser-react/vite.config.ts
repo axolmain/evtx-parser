@@ -13,7 +13,7 @@ export default defineConfig(() => ({
 		react(),
 		VitePWA({
 			registerType: 'autoUpdate',
-			includeAssets: ['favicon.png'],
+			includeAssets: ['favicon.png', 'pwa-192.png', 'pwa-512.png'],
 			manifest: {
 				name: 'EVTX Parser - Windows Event Log Viewer',
 				short_name: 'EVTX Parser',
@@ -25,14 +25,15 @@ export default defineConfig(() => ({
 				scope: '/evtx-parser/',
 				icons: [
 					{
-						src: '/evtx-parser/favicon.png',
+						src: '/evtx-parser/pwa-192.png',
 						sizes: '192x192',
 						type: 'image/png',
 					},
 					{
-						src: '/evtx-parser/favicon.png',
+						src: '/evtx-parser/pwa-512.png',
 						sizes: '512x512',
 						type: 'image/png',
+						purpose: 'any maskable',
 					},
 				],
 			},
