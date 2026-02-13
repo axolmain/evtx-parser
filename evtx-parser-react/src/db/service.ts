@@ -1,8 +1,6 @@
 import type {ParsedEventRecord} from '@/parser'
-import type {ChunkParseSuccess} from '@/worker/protocol'
 import {
 	type Archive,
-	type ChunkCache,
 	db,
 	type EvtxCachedData,
 	type StoredEvent,
@@ -20,10 +18,6 @@ export function generateFileId(archiveId: string, fileName: string): string {
 
 export function generateEventId(fileId: string, recordId: number): string {
 	return `${fileId}::${recordId}`
-}
-
-export function generateChunkId(fileId: string, chunkIndex: number): string {
-	return `${fileId}::chunk_${chunkIndex}`
 }
 
 // ============================================================================
@@ -58,14 +52,8 @@ export async function getAllArchives(): Promise<Archive[]> {
 }
 
 export async function deleteArchive(id: string): Promise<void> {
-	// Get archive to find associated files
 	const archive = await db.archives.get(id)
 	if (!archive) return
-
-	// Delete all cached chunks for files in this archive
-	for (const fileId of archive.files) {
-		await db.chunks.where('fileId').equals(fileId).delete()
-	}
 
 	// Delete all associated events
 	await db.events.where('archiveId').equals(id).delete()
@@ -80,10 +68,9 @@ export async function deleteArchive(id: string): Promise<void> {
 export async function clearAllArchives(): Promise<void> {
 	await db.transaction(
 		'rw',
-		[db.archives, db.files, db.events, db.chunks],
+		[db.archives, db.files, db.events],
 		async () => {
 			await db.events.clear()
-			await db.chunks.clear()
 			await db.files.clear()
 			await db.archives.clear()
 		}
@@ -308,121 +295,4 @@ export async function getEventCountsByLevel(
 	}
 
 	return counts
-}
-
-// ============================================================================
-// Chunk Cache Operations (for progressive parsing)
-// ============================================================================
-
-/**
- * Cache a parsed chunk result to IndexedDB.
- * Non-blocking - returns immediately and caches in background.
- */
-export async function cacheChunk(
-	fileId: string,
-	chunkIndex: number,
-	result: ChunkParseSuccess
-): Promise<void> {
-	const id = generateChunkId(fileId, chunkIndex)
-	const chunkCache: ChunkCache = {
-		id,
-		fileId,
-		chunkIndex,
-		result,
-		cachedAt: new Date()
-	}
-
-	try {
-		await db.chunks.put(chunkCache)
-	} catch (error) {
-		console.warn('Failed to cache chunk:', error)
-		// Non-blocking - failures don't affect parsing
-	}
-}
-
-/**
- * Load all cached chunks for a file.
- * Returns a map of chunk index to parse result.
- */
-export async function loadCachedChunks(
-	fileId: string
-): Promise<Map<number, ChunkParseSuccess>> {
-	const chunks = await db.chunks.where('fileId').equals(fileId).toArray()
-
-	const chunkMap = new Map<number, ChunkParseSuccess>()
-	for (const chunk of chunks) {
-		chunkMap.set(chunk.chunkIndex, chunk.result)
-	}
-
-	return chunkMap
-}
-
-/**
- * Check if all chunks for a file are cached.
- */
-export async function areAllChunksCached(
-	fileId: string,
-	totalChunks: number
-): Promise<boolean> {
-	const count = await db.chunks.where('fileId').equals(fileId).count()
-	return count === totalChunks
-}
-
-/**
- * Clear cached chunks for a file (e.g., when file is deleted).
- */
-export async function clearChunksForFile(fileId: string): Promise<void> {
-	await db.chunks.where('fileId').equals(fileId).delete()
-}
-
-/**
- * Clear all cached chunks (for cleanup).
- */
-export async function clearAllChunks(): Promise<void> {
-	await db.chunks.clear()
-}
-
-/**
- * Get cache statistics.
- */
-export async function getChunkCacheStats(): Promise<{
-	totalChunks: number
-	totalFiles: number
-	oldestCache: Date | null
-	newestCache: Date | null
-}> {
-	const chunks = await db.chunks.toArray()
-
-	const totalChunks = chunks.length
-	const uniqueFiles = new Set(chunks.map(c => c.fileId))
-	const totalFiles = uniqueFiles.size
-
-	const dates = chunks.map(c => c.cachedAt.getTime())
-	const oldestCache = dates.length > 0 ? new Date(Math.min(...dates)) : null
-	const newestCache = dates.length > 0 ? new Date(Math.max(...dates)) : null
-
-	return {
-		totalChunks,
-		totalFiles,
-		oldestCache,
-		newestCache
-	}
-}
-
-/**
- * Evict oldest cached chunks to free space (LRU eviction).
- * Keeps the most recently cached chunks up to the specified limit.
- */
-export async function evictOldChunks(keepCount: number): Promise<number> {
-	const chunks = await db.chunks.orderBy('cachedAt').toArray()
-
-	if (chunks.length <= keepCount) {
-		return 0 // Nothing to evict
-	}
-
-	const toEvict = chunks.slice(0, chunks.length - keepCount)
-	const idsToDelete = toEvict.map(c => c.id)
-
-	await db.chunks.bulkDelete(idsToDelete)
-	return idsToDelete.length
 }

@@ -82,7 +82,7 @@ export interface TemplateStats {
 
 export interface SubstitutionValue {
 	readonly bytes: Uint8Array
-	readonly rendered: string
+	rendered: string | null
 	readonly size: number
 	readonly type: number
 }

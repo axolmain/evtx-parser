@@ -21,16 +21,6 @@ const LEVEL_NAMES: Record<number, string> = {
 	5: 'Verbose'
 }
 
-function extractEventFields(
-	xmlString: string
-): Omit<ParsedEventRecord, 'recordId' | 'timestamp' | 'xml' | 'chunkIndex'> {
-	const parsed = parseEventXml(xmlString)
-
-	return {
-		...parsed,
-		levelText: LEVEL_NAMES[parsed.level] || `Level ${parsed.level}`
-	}
-}
 
 function filetimeToIso(dv: DataView, offset: number): string {
 	const ft = dv.getBigUint64(offset, true)
@@ -311,7 +301,7 @@ export function parseEventRecord(
 		})
 	}
 
-	const extracted = extractEventFields(parsedXml)
+	const parsed = parseEventXml(parsedXml)
 	return {
 		xml: parsedXml,
 		record: {
@@ -319,7 +309,8 @@ export function parseEventRecord(
 			timestamp: r.timestamp,
 			xml: parsedXml,
 			chunkIndex,
-			...extracted
+			...parsed,
+			levelText: LEVEL_NAMES[parsed.level] || `Level ${parsed.level}`
 		}
 	}
 }

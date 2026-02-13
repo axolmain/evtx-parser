@@ -9,8 +9,6 @@ import {
 interface NavbarContextType {
 	navbarContent: ReactNode | null
 	setNavbarContent: (content: ReactNode | null) => void
-	progressiveMode: boolean
-	setProgressiveMode: (enabled: boolean) => void
 	closeNavbarRef: React.MutableRefObject<() => void>
 }
 
@@ -18,7 +16,6 @@ const NavbarContext = createContext<NavbarContextType | null>(null)
 
 export function NavbarProvider({children}: {children: ReactNode}) {
 	const [navbarContent, setNavbarContent] = useState<ReactNode | null>(null)
-	const [progressiveMode, setProgressiveMode] = useState(false)
 	const closeNavbarRef = useRef<() => void>(() => {})
 
 	return (
@@ -26,8 +23,6 @@ export function NavbarProvider({children}: {children: ReactNode}) {
 			value={{
 				navbarContent,
 				setNavbarContent,
-				progressiveMode,
-				setProgressiveMode,
 				closeNavbarRef,
 			}}
 		>

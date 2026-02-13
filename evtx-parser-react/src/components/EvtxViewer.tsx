@@ -1,8 +1,7 @@
-import {Alert, Button, Divider, Group, Stack, Text} from '@mantine/core'
-import {IconInfoCircle, IconLayoutList, IconTable} from '@tabler/icons-react'
+import {Button, Divider, Group, Stack, Text} from '@mantine/core'
+import {IconLayoutList, IconTable} from '@tabler/icons-react'
 import {useEffect, useMemo, useState} from 'react'
 import {useEvtxParser} from '@/hooks/useEvtxParser'
-import type {StreamingProgress} from '@/hooks/useEvtxParserHelpers'
 import {usePagination} from '@/hooks/usePagination'
 import type {EvtxParseResult} from '@/parser'
 import {CopyButton} from './CopyButton'
@@ -25,8 +24,6 @@ interface EvtxViewerProps {
 	parseTime?: number
 	onParseComplete?: (result: EvtxParseResult, fileName: string) => void
 	selectedRecordId: number | null
-	isLoadingMore?: boolean
-	parseProgress?: StreamingProgress | null
 }
 
 type StatusType = 'error' | 'info' | 'success'
@@ -76,8 +73,6 @@ export function EvtxViewer({
 	parseTime: propParseTime,
 	onParseComplete,
 	selectedRecordId,
-	isLoadingMore = false,
-	parseProgress = null
 }: EvtxViewerProps) {
 	const {state, parseFile} = useEvtxParser()
 	const [viewMode, setViewMode] = useState<ViewMode>('viewer')
@@ -86,24 +81,20 @@ export function EvtxViewer({
 		1, 2, 3, 4, 5
 	])
 
-	// Determine if we're using pre-parsed results or parsing a file
 	const isParsedMode = parsedResult !== undefined
 
-	// Auto-parse file when prop changes (only in file mode)
 	useEffect(() => {
 		if (file && !isParsedMode) {
 			parseFile(file)
 		}
 	}, [file, isParsedMode, parseFile])
 
-	// Call onParseComplete callback when parsing is done
 	useEffect(() => {
 		if (state.status === 'done' && onParseComplete && !isParsedMode) {
 			onParseComplete(state.result, state.fileName)
 		}
 	}, [state, onParseComplete, isParsedMode])
 
-	// Use either parsed result or state result
 	const effectiveState = isParsedMode
 		? {
 				status: 'done' as const,
@@ -114,16 +105,13 @@ export function EvtxViewer({
 			}
 		: state
 
-	// Filter records based on search and level filters
 	const filteredRecords = useMemo(() => {
 		if (effectiveState.status !== 'done') return []
 
 		let filtered = effectiveState.result.records
 
-		// Filter by level
 		filtered = filtered.filter(r => selectedLevels.includes(r.level))
 
-		// Filter by search query
 		if (searchQuery.trim()) {
 			const query = searchQuery.toLowerCase()
 			filtered = filtered.filter(
@@ -139,7 +127,6 @@ export function EvtxViewer({
 		return filtered
 	}, [effectiveState, searchQuery, selectedLevels])
 
-	// Calculate level counts for all records (before filtering)
 	const levelCounts = useMemo(() => {
 		if (effectiveState.status !== 'done') return {}
 		const counts: Record<number, number> = {}
@@ -171,29 +158,12 @@ export function EvtxViewer({
 
 			{effectiveState.status === 'done' && (
 				<>
-					{/* Summary Bar */}
 					<EventSummary records={effectiveState.result.records} />
-
-					{/* Progressive Loading Indicator */}
-					{isLoadingMore && parseProgress && (
-						<Alert
-							color='blue'
-							icon={<IconInfoCircle />}
-							style={{width: '100%'}}
-							title='Loading more chunks...'
-						>
-							Parsed {parseProgress.parsedChunks}/{parseProgress.totalChunks}{' '}
-							chunks ({parseProgress.actualRecords} records so far). Search and
-							filters will be available when complete.
-						</Alert>
-					)}
 
 					<Divider style={{width: '100%'}} />
 
-					{/* Search and Filters */}
 					<Group justify='space-between' style={{width: '100%'}}>
 						<EventFilters
-							disabled={isLoadingMore}
 							levelCounts={levelCounts}
 							onLevelsChange={setSelectedLevels}
 							onSearchChange={setSearchQuery}
@@ -221,7 +191,6 @@ export function EvtxViewer({
 						</Group>
 					</Group>
 
-					{/* Actions Row */}
 					<Group gap='sm' style={{width: '100%'}}>
 						<WarningsPanel warnings={effectiveState.result.warnings} />
 						<CopyButton disabled={false} text={effectiveState.result.xml} />
@@ -237,7 +206,6 @@ export function EvtxViewer({
 
 					<Divider style={{width: '100%'}} />
 
-					{/* Viewer/Table Content */}
 					{viewMode === 'viewer' && (
 						<EventViewer
 							records={displayRecords}
@@ -251,7 +219,6 @@ export function EvtxViewer({
 						/>
 					)}
 
-					{/* Stats and Pagination Row */}
 					<Group justify='space-between' style={{width: '100%'}}>
 						<StatsDisplay
 							fileSize={effectiveState.fileSize}

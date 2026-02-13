@@ -1,6 +1,9 @@
 import {HEX, TOKEN, TOKEN_NAMES} from './constants'
 import type {ParsePosition} from './types'
 
+// Shared decoder — never re-allocated
+const utf16 = new TextDecoder('utf-16le')
+
 export function filetimeToIso(dv: DataView, offset: number): string {
 	const ft = dv.getBigUint64(offset, true)
 	if (ft === 0n) return ''
@@ -24,6 +27,9 @@ export function hex32(v: number): string {
 }
 
 export function xmlEscape(str: string): string {
+	if (str.indexOf('&') === -1 && str.indexOf('<') === -1 &&
+		str.indexOf('>') === -1 && str.indexOf('"') === -1 &&
+		str.indexOf("'") === -1) return str
 	return str
 		.replaceAll('&', '&amp;')
 		.replaceAll('<', '&lt;')
@@ -39,7 +45,7 @@ export function readName(chunkDv: DataView, chunkRelOffset: number): string {
 		chunkDv.byteOffset + chunkRelOffset + 8,
 		numChars * 2
 	)
-	return new TextDecoder('utf-16le').decode(strBytes)
+	return utf16.decode(strBytes)
 }
 
 export function readUnicodeTextString(
@@ -55,7 +61,7 @@ export function readUnicodeTextString(
 		numChars * 2
 	)
 	pos.offset += numChars * 2
-	return new TextDecoder('utf-16le').decode(strBytes)
+	return utf16.decode(strBytes)
 }
 
 export function tokenName(byte: number): string {
@@ -65,14 +71,14 @@ export function tokenName(byte: number): string {
 	return name
 }
 
-export function formatGuid(guidBytes: Uint8Array): string {
-	const dv = new DataView(guidBytes.buffer, guidBytes.byteOffset, 16)
-	const d1 = dv.getUint32(0, true).toString(16).padStart(8, '0')
-	const d2 = dv.getUint16(4, true).toString(16).padStart(4, '0')
-	const d3 = dv.getUint16(6, true).toString(16).padStart(4, '0')
-	let d4 = ''
-	for (let i = 8; i < 16; i++) {
-		d4 += HEX[guidBytes[i] ?? 0] ?? '??'
-	}
-	return `{${d1}-${d2}-${d3}-${d4.slice(0, 4)}-${d4.slice(4)}}`
+export function formatGuid(b: Uint8Array): string {
+	// Read LE integers from bytes directly — no DataView allocation
+	const d1 = ((b[3]! << 24) | (b[2]! << 16) | (b[1]! << 8) | b[0]!) >>> 0
+	const d2 = (b[5]! << 8) | b[4]!
+	const d3 = (b[7]! << 8) | b[6]!
+	return '{' + d1.toString(16).padStart(8, '0') + '-' +
+		d2.toString(16).padStart(4, '0') + '-' +
+		d3.toString(16).padStart(4, '0') + '-' +
+		HEX[b[8]!]! + HEX[b[9]!]! + HEX[b[10]!]! + HEX[b[11]!]! + '-' +
+		HEX[b[12]!]! + HEX[b[13]!]! + HEX[b[14]!]! + HEX[b[15]!]! + '}'
 }

@@ -1,7 +1,6 @@
 import Dexie, {type EntityTable} from 'dexie'
 import type {FileType} from '@/lib/fileTypes'
 import type {EvtxParseResult} from '@/parser'
-import type {ChunkParseSuccess} from '@/worker/protocol'
 
 // Archive metadata
 export interface Archive {
@@ -55,52 +54,30 @@ export interface StoredEvent {
 	xml: string
 }
 
-// Cached parsed chunk (for progressive parsing)
-export interface ChunkCache {
-	id: string // "fileId::chunk_N"
-	fileId: string
-	chunkIndex: number
-	result: ChunkParseSuccess
-	cachedAt: Date
-}
-
 // Database schema
 export class SysInfoZipDB extends Dexie {
 	archives!: EntityTable<Archive, 'id'>
 	files!: EntityTable<StoredFile, 'id'>
 	events!: EntityTable<StoredEvent, 'id'>
-	chunks!: EntityTable<ChunkCache, 'id'>
 
 	constructor() {
 		super('SysInfoZipDB')
 
 		// Version 1: Initial schema
 		this.version(1).stores({
-			// Archives table
 			archives: 'id, name, uploadedAt',
-
-			// Files table - indexed by archiveId and type for queries
 			files: 'id, archiveId, type, name',
-
-			// Events table - indexed for search performance
 			events:
 				'id, archiveId, fileId, eventId, provider, level, computer, timestamp, [archiveId+level], [fileId+eventId]'
 		})
 
-		// Version 2: Add chunk caching for progressive parsing
+		// Version 2: Remove chunks table (was used for progressive parsing)
 		this.version(2).stores({
-			// Archives table (unchanged)
 			archives: 'id, name, uploadedAt',
-
-			// Files table (unchanged)
 			files: 'id, archiveId, type, name',
-
-			// Events table (unchanged)
 			events:
 				'id, archiveId, fileId, eventId, provider, level, computer, timestamp, [archiveId+level], [fileId+eventId]',
-
-			// Chunks table - cached parsed chunks for fast re-opening
-			chunks: 'id, fileId, chunkIndex, [fileId+chunkIndex], cachedAt'
+			chunks: null // Delete the chunks table
 		})
 	}
 }

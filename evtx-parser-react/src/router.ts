@@ -39,7 +39,6 @@ export interface FileSearchParams {
 	event?: number
 	page?: number
 	pageSize?: number
-	progressive?: boolean
 	fieldsToExtract?: string
 }
 
@@ -56,8 +55,6 @@ const fileRoute = createRoute({
 		if (search['page'] !== undefined) params.page = Number(search['page'])
 		if (search['pageSize'] !== undefined)
 			params.pageSize = Number(search['pageSize'])
-		if (search['progressive'] !== undefined)
-			params.progressive = search['progressive'] === 'true'
 		if (search['fieldsToExtract'] !== undefined)
 			params.fieldsToExtract = String(search['fieldsToExtract'])
 		return params
@@ -82,7 +79,6 @@ export const router = createRouter({
 	routeTree,
 	history: hashHistory,
 	defaultNotFoundComponent: () => {
-		// Redirect to home on not found
 		window.location.hash = '#/'
 		return null
 	}

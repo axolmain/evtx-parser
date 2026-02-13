@@ -1,8 +1,6 @@
-import {createContext, useCallback, useContext, useEffect, useRef} from 'react'
-import {createPool} from '@/hooks/useEvtxParserHelpers'
+import {createContext, useCallback, useContext, useRef} from 'react'
 import type {FileType} from '@/lib/fileTypes'
 import type {EvtxParseResult} from '@/parser'
-import type {ChunkWorkerPool} from '@/worker/worker-pool'
 
 export interface EvtxCacheData {
 	result: EvtxParseResult
@@ -31,7 +29,6 @@ interface CacheContextValue {
 		data: EvtxCacheData | unknown | string
 	) => void
 	clearCaches: () => void
-	getPool: () => ChunkWorkerPool | null
 	cacheStats: () => {evtx: number; json: number; txt: number}
 }
 
@@ -42,25 +39,9 @@ function getCacheKey(archiveId: string, entryName: string) {
 }
 
 export function CacheProvider({children}: {children: React.ReactNode}) {
-	const poolRef = useRef<ChunkWorkerPool | null | undefined>(undefined)
 	const evtxCacheRef = useRef<Map<string, CacheEntry<EvtxCacheData>>>(new Map())
 	const jsonCacheRef = useRef<Map<string, CacheEntry<unknown>>>(new Map())
 	const textCacheRef = useRef<Map<string, CacheEntry<string>>>(new Map())
-
-	useEffect(
-		() => () => {
-			poolRef.current?.dispose()
-			poolRef.current = null
-		},
-		[]
-	)
-
-	const getPool = useCallback((): ChunkWorkerPool | null => {
-		if (poolRef.current === undefined) {
-			poolRef.current = createPool()
-		}
-		return poolRef.current
-	}, [])
 
 	const evictOldestEvtxCache = useCallback(() => {
 		const cache = evtxCacheRef.current
@@ -166,7 +147,6 @@ export function CacheProvider({children}: {children: React.ReactNode}) {
 				getCachedContent,
 				setCachedContent,
 				clearCaches,
-				getPool,
 				cacheStats
 			}}
 		>

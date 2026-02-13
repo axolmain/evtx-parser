@@ -12,6 +12,9 @@ import type {
 	TemplateStats
 } from './types'
 
+// Shared empty bytes — reused for all zero-size substitution values
+const EMPTY_BYTES = new Uint8Array(0)
+
 export class BinXmlParser {
 	// Cached decoders — shared across ALL instances, never re-allocated
 	static utf16 = new TextDecoder('utf-16le')
@@ -21,6 +24,7 @@ export class BinXmlParser {
 	chunkDv: DataView
 	chunkHeader: ChunkHeader | null
 	tplStats: TemplateStats
+	private chunkStart: number
 
 	constructor(
 		chunkDv: DataView,
@@ -30,6 +34,7 @@ export class BinXmlParser {
 		this.chunkDv = chunkDv
 		this.chunkHeader = chunkHeader
 		this.tplStats = tplStats
+		this.chunkStart = chunkHeader ? chunkHeader.chunkStart : 0
 	}
 
 	private readName(chunkRelOffset: number): string {
@@ -60,10 +65,9 @@ export class BinXmlParser {
 
 	private renderSubstitutionValue(
 		valueBytes: Uint8Array,
-		valueType: number,
-		chunkStart: number
+		valueType: number
 	): string {
-		if (valueBytes.length === 0 && valueType !== VALUE_TYPE.NULL) return ''
+		if (valueBytes.length === 0) return ''
 
 		// Array flag: bit 0x80 means array of base type
 		if (valueType & 0x80) {
@@ -113,24 +117,21 @@ export class BinXmlParser {
 						elemSize
 					)
 					results.push(
-						this.renderSubstitutionValue(elem, baseType, chunkStart)
+						this.renderSubstitutionValue(elem, baseType)
 					)
 				}
 				return results.join(', ')
 			}
-			// Fallback: render as hex
-			const hex: string[] = []
+			// Fallback: render as hex (string concat instead of array+join)
+			let hex = ''
 			for (let i = 0; i < valueBytes.length; i++) {
-				hex.push(HEX[valueBytes[i] ?? 0] ?? '??')
+				hex += HEX[valueBytes[i]!]!
 			}
-			return hex.join('')
+			return hex
 		}
 
-		const vdv = new DataView(
-			valueBytes.buffer,
-			valueBytes.byteOffset,
-			valueBytes.byteLength
-		)
+		// Scalar types — use this.chunkDv with offset instead of allocating a new DataView
+		const vOff = valueBytes.byteOffset - this.chunkDv.byteOffset
 
 		switch (valueType) {
 			case VALUE_TYPE.NULL:
@@ -146,53 +147,53 @@ export class BinXmlParser {
 				return xmlEscape(s)
 			}
 			case VALUE_TYPE.INT8:
-				return String(vdv.getInt8(0))
+				return String(this.chunkDv.getInt8(vOff))
 			case VALUE_TYPE.UINT8:
-				return String(vdv.getUint8(0))
+				return String(this.chunkDv.getUint8(vOff))
 			case VALUE_TYPE.INT16:
-				return String(vdv.getInt16(0, true))
+				return String(this.chunkDv.getInt16(vOff, true))
 			case VALUE_TYPE.UINT16:
-				return String(vdv.getUint16(0, true))
+				return String(this.chunkDv.getUint16(vOff, true))
 			case VALUE_TYPE.INT32:
-				return String(vdv.getInt32(0, true))
+				return String(this.chunkDv.getInt32(vOff, true))
 			case VALUE_TYPE.UINT32:
-				return String(vdv.getUint32(0, true))
+				return String(this.chunkDv.getUint32(vOff, true))
 			case VALUE_TYPE.INT64:
-				return String(vdv.getBigInt64(0, true))
+				return String(this.chunkDv.getBigInt64(vOff, true))
 			case VALUE_TYPE.UINT64:
-				return String(vdv.getBigUint64(0, true))
+				return String(this.chunkDv.getBigUint64(vOff, true))
 			case VALUE_TYPE.FLOAT:
-				return String(vdv.getFloat32(0, true))
+				return String(this.chunkDv.getFloat32(vOff, true))
 			case VALUE_TYPE.DOUBLE:
-				return String(vdv.getFloat64(0, true))
+				return String(this.chunkDv.getFloat64(vOff, true))
 			case VALUE_TYPE.BOOL:
-				return vdv.getUint32(0, true) ? 'true' : 'false'
+				return this.chunkDv.getUint32(vOff, true) ? 'true' : 'false'
 			case VALUE_TYPE.BINARY: {
-				const hex: string[] = []
+				let hex = ''
 				for (let i = 0; i < valueBytes.length; i++) {
-					hex.push(HEX[valueBytes[i] ?? 0] ?? '??')
+					hex += HEX[valueBytes[i]!]!
 				}
-				return hex.join('')
+				return hex
 			}
 			case VALUE_TYPE.GUID: {
 				if (valueBytes.length < 16) return ''
-				const d1 = vdv.getUint32(0, true).toString(16).padStart(8, '0')
-				const d2 = vdv.getUint16(4, true).toString(16).padStart(4, '0')
-				const d3 = vdv.getUint16(6, true).toString(16).padStart(2, '0')
-				let d4 = ''
-				for (let i = 8; i < 16; i++) {
-					d4 += HEX[valueBytes[i] ?? 0] ?? '??'
-				}
-				return `{${d1}-${d2}-${d3}-${d4.slice(0, 4)}-${d4.slice(4)}}`
+				const d1 = this.chunkDv.getUint32(vOff, true).toString(16).padStart(8, '0')
+				const d2 = this.chunkDv.getUint16(vOff + 4, true).toString(16).padStart(4, '0')
+				const d3 = this.chunkDv.getUint16(vOff + 6, true).toString(16).padStart(4, '0')
+				return '{' + d1 + '-' + d2 + '-' + d3 + '-' +
+					HEX[valueBytes[8]!]! + HEX[valueBytes[9]!]! +
+					HEX[valueBytes[10]!]! + HEX[valueBytes[11]!]! + '-' +
+					HEX[valueBytes[12]!]! + HEX[valueBytes[13]!]! +
+					HEX[valueBytes[14]!]! + HEX[valueBytes[15]!]! + '}'
 			}
 			case VALUE_TYPE.SIZE: {
 				if (valueBytes.length === 8)
-					return `0x${vdv.getBigUint64(0, true).toString(16).padStart(16, '0')}`
-				return `0x${vdv.getUint32(0, true).toString(16).padStart(8, '0')}`
+					return `0x${this.chunkDv.getBigUint64(vOff, true).toString(16).padStart(16, '0')}`
+				return `0x${this.chunkDv.getUint32(vOff, true).toString(16).padStart(8, '0')}`
 			}
 			case VALUE_TYPE.FILETIME: {
 				if (valueBytes.length < 8) return ''
-				const ft = vdv.getBigUint64(0, true)
+				const ft = this.chunkDv.getBigUint64(vOff, true)
 				if (ft === 0n) return ''
 				const ms = Number(ft / 10000n - 11644473600000n)
 				const d = new Date(ms)
@@ -201,44 +202,44 @@ export class BinXmlParser {
 			}
 			case VALUE_TYPE.SYSTEMTIME: {
 				if (valueBytes.length < 16) return ''
-				const yr = vdv.getUint16(0, true)
-				const mo = vdv.getUint16(2, true)
-				const dy = vdv.getUint16(6, true)
-				const hr = vdv.getUint16(8, true)
-				const mn = vdv.getUint16(10, true)
-				const sc = vdv.getUint16(12, true)
-				const msVal = vdv.getUint16(14, true)
+				const yr = this.chunkDv.getUint16(vOff, true)
+				const mo = this.chunkDv.getUint16(vOff + 2, true)
+				const dy = this.chunkDv.getUint16(vOff + 6, true)
+				const hr = this.chunkDv.getUint16(vOff + 8, true)
+				const mn = this.chunkDv.getUint16(vOff + 10, true)
+				const sc = this.chunkDv.getUint16(vOff + 12, true)
+				const msVal = this.chunkDv.getUint16(vOff + 14, true)
 				return `${yr}-${String(mo).padStart(2, '0')}-${String(dy).padStart(2, '0')}T${String(hr).padStart(2, '0')}:${String(mn).padStart(2, '0')}:${String(sc).padStart(2, '0')}.${String(msVal).padStart(3, '0')}Z`
 			}
 			case VALUE_TYPE.SID: {
 				if (valueBytes.length < 8) return ''
-				const rev = valueBytes[0] ?? 0
-				const subCount = valueBytes[1] ?? 0
+				const rev = valueBytes[0]!
+				const subCount = valueBytes[1]!
 				let auth = 0
 				for (let i = 2; i < 8; i++) {
-					auth = auth * 256 + (valueBytes[i] ?? 0)
+					auth = auth * 256 + valueBytes[i]!
 				}
 				let sid = `S-${rev}-${auth}`
 				for (let i = 0; i < subCount; i++) {
 					if (8 + i * 4 + 4 > valueBytes.length) break
-					sid += `-${vdv.getUint32(8 + i * 4, true)}`
+					sid += '-' + this.chunkDv.getUint32(vOff + 8 + i * 4, true)
 				}
 				return sid
 			}
 			case VALUE_TYPE.HEX32:
-				return `0x${vdv.getUint32(0, true).toString(16).padStart(8, '0')}`
+				return `0x${this.chunkDv.getUint32(vOff, true).toString(16).padStart(8, '0')}`
 			case VALUE_TYPE.HEX64:
-				return `0x${vdv.getBigUint64(0, true).toString(16).padStart(16, '0')}`
+				return `0x${this.chunkDv.getBigUint64(vOff, true).toString(16).padStart(16, '0')}`
 			case VALUE_TYPE.BINXML: {
 				const embeddedChunkBase = valueBytes.byteOffset - this.chunkDv.byteOffset
-				return this.parseDocument(valueBytes, chunkStart, embeddedChunkBase)
+				return this.parseDocument(valueBytes, this.chunkStart, embeddedChunkBase)
 			}
 			default: {
-				const hex: string[] = []
+				let hex = ''
 				for (let i = 0; i < valueBytes.length; i++) {
-					hex.push(HEX[valueBytes[i] ?? 0] ?? '??')
+					hex += HEX[valueBytes[i]!]!
 				}
-				return `<!-- unknown value type 0x${HEX[valueType] ?? '??'} -->${hex.join('')}`
+				return '<!-- unknown value type 0x' + (HEX[valueType] ?? '??') + ' -->' + hex
 			}
 		}
 	}
@@ -250,7 +251,7 @@ export class BinXmlParser {
 		subs: SubstitutionValue[] | null,
 		binxmlChunkBase: number
 	): string {
-		const parts: string[] = []
+		let result = ''
 
 		while (pos.offset < bytes.length) {
 			const tok = bytes[pos.offset] ?? 0
@@ -267,21 +268,23 @@ export class BinXmlParser {
 			}
 
 			if (base === TOKEN.OPEN_START_ELEMENT) {
-				parts.push(
-					this.parseElement(bytes, dv, pos, subs, binxmlChunkBase)
-				)
+				result += this.parseElement(bytes, dv, pos, subs, binxmlChunkBase)
 			} else if (base === TOKEN.VALUE) {
 				pos.offset++ // consume token
 				pos.offset++ // value type
 				const str = this.readUnicodeTextString(dv, bytes, pos)
-				parts.push(xmlEscape(str))
+				result += xmlEscape(str)
 			} else if (base === TOKEN.NORMAL_SUBSTITUTION) {
 				pos.offset++ // consume token
 				const subId = dv.getUint16(pos.offset, true)
 				pos.offset += 2
 				pos.offset++ // subValType
 				if (subs && subId < subs.length) {
-					parts.push(subs[subId]?.rendered ?? '')
+					const sub = subs[subId]!
+					if (sub.rendered === null) {
+						sub.rendered = this.renderSubstitutionValue(sub.bytes, sub.type)
+					}
+					result += sub.rendered
 				}
 			} else if (base === TOKEN.OPTIONAL_SUBSTITUTION) {
 				pos.offset++ // consume token
@@ -289,43 +292,41 @@ export class BinXmlParser {
 				pos.offset += 2
 				pos.offset++ // subValType
 				if (subs && subId < subs.length) {
-					const sub = subs[subId]
-					if (sub && sub.type !== VALUE_TYPE.NULL && sub.size > 0) {
-						parts.push(sub.rendered)
+					const sub = subs[subId]!
+					if (sub.type !== VALUE_TYPE.NULL && sub.size > 0) {
+						if (sub.rendered === null) {
+							sub.rendered = this.renderSubstitutionValue(sub.bytes, sub.type)
+						}
+						result += sub.rendered
 					}
 				}
 			} else if (base === TOKEN.CHAR_REF) {
 				pos.offset++ // consume token
 				const charVal = dv.getUint16(pos.offset, true)
 				pos.offset += 2
-				parts.push(`&#${charVal};`)
+				result += '&#' + charVal + ';'
 			} else if (base === TOKEN.ENTITY_REF) {
 				pos.offset++ // consume token
 				const nameOff = dv.getUint32(pos.offset, true)
 				pos.offset += 4
 				const entityName = this.readName(nameOff)
-				parts.push(`&${entityName};`)
+				result += '&' + entityName + ';'
 			} else if (base === TOKEN.CDATA_SECTION) {
 				pos.offset++ // consume token
 				const cdataStr = this.readUnicodeTextString(dv, bytes, pos)
-				parts.push(`<![CDATA[${cdataStr}]]>`)
+				result += '<![CDATA[' + cdataStr + ']]>'
 			} else if (base === TOKEN.TEMPLATE_INSTANCE) {
-				parts.push(
-					this.parseTemplateInstance(bytes, dv, pos, binxmlChunkBase)
-				)
+				result += this.parseTemplateInstance(bytes, dv, pos, binxmlChunkBase)
 			} else if (base === TOKEN.FRAGMENT_HEADER) {
-				parts.push(
-					this.parseFragment(bytes, dv, pos, binxmlChunkBase)
-				)
+				result += this.parseFragment(bytes, dv, pos, binxmlChunkBase)
 			} else {
-				parts.push(
-					`<!-- UNEXPECTED content token 0x${HEX[tok] ?? '??'} (${tokenName(tok)}) at offset ${pos.offset} -->`
-				)
+				result += '<!-- UNEXPECTED content token 0x' + (HEX[tok] ?? '??') +
+					' (' + tokenName(tok) + ') at offset ' + pos.offset + ' -->'
 				pos.offset++
 			}
 		}
 
-		return parts.join('')
+		return result
 	}
 
 	private parseElement(
@@ -350,7 +351,7 @@ export class BinXmlParser {
 		}
 
 		const elemName = this.readName(nameOffset)
-		const parts: string[] = [`<${elemName}`]
+		let xml = '<' + elemName
 
 		// Parse attribute list if present
 		if (hasAttrs) {
@@ -380,37 +381,31 @@ export class BinXmlParser {
 					subs,
 					binxmlChunkBase
 				)
-				parts.push(` ${attrName}="${attrValue}"`)
+				xml += ' ' + attrName + '="' + attrValue + '"'
 			}
 		}
 
 		// Next token: CloseEmptyElement or CloseStartElement
 		if (pos.offset >= bytes.length) {
-			parts.push('/>')
-			return parts.join('')
+			return xml + '/>'
 		}
 
 		const closeTok = bytes[pos.offset] ?? 0
 		if (closeTok === TOKEN.CLOSE_EMPTY_ELEMENT) {
 			pos.offset++ // consume 0x03
-			parts.push('/>')
+			return xml + '/>'
 		} else if (closeTok === TOKEN.CLOSE_START_ELEMENT) {
 			pos.offset++ // consume 0x02
-			parts.push('>')
-			parts.push(
-				this.parseContent(bytes, dv, pos, subs, binxmlChunkBase)
-			)
+			xml += '>'
+			xml += this.parseContent(bytes, dv, pos, subs, binxmlChunkBase)
 			if (pos.offset < bytes.length && bytes[pos.offset] === TOKEN.END_ELEMENT) {
 				pos.offset++
 			}
-			parts.push(`</${elemName}>`)
+			return xml + '</' + elemName + '>'
 		} else {
-			parts.push(
-				`><!-- UNEXPECTED close token 0x${HEX[closeTok] ?? '??'} --></${elemName}>`
-			)
+			return xml + '><!-- UNEXPECTED close token 0x' + (HEX[closeTok] ?? '??') +
+				' --></' + elemName + '>'
 		}
-
-		return parts.join('')
 	}
 
 	private parseTemplateInstance(
@@ -508,42 +503,33 @@ export class BinXmlParser {
 		const numValues = dv.getUint32(pos.offset, true)
 		pos.offset += 4
 
-		// Read value descriptors
-		const descriptors: Array<{size: number; type: number}> = []
-		for (let i = 0; i < numValues; i++) {
-			const valSize = dv.getUint16(pos.offset, true)
-			pos.offset += 2
-			const valType = bytes[pos.offset] ?? 0
-			pos.offset++
-			pos.offset++ // padding
-			descriptors.push({size: valSize, type: valType})
-		}
+		// Read descriptors inline (no intermediate array allocation)
+		const descStart = pos.offset
+		pos.offset += numValues * 4 // skip all descriptors: 2 size + 1 type + 1 padding each
 
-		// Read value data (concatenated)
-		const chunkStart = this.chunkHeader ? this.chunkHeader.chunkStart : 0
+		// Read value data and build subs with lazy rendering
 		const subs: SubstitutionValue[] = []
 		for (let i = 0; i < numValues; i++) {
-			const desc = descriptors[i]!
+			const descOff = descStart + i * 4
+			const valSize = dv.getUint16(descOff, true)
+			const valType = bytes[descOff + 2] ?? 0
+
 			let valBytes: Uint8Array
-			if (desc.size > 0 && pos.offset + desc.size <= bytes.length) {
+			if (valSize > 0 && pos.offset + valSize <= bytes.length) {
 				valBytes = new Uint8Array(
 					bytes.buffer,
 					bytes.byteOffset + pos.offset,
-					desc.size
+					valSize
 				)
 			} else {
-				valBytes = new Uint8Array(0)
+				valBytes = EMPTY_BYTES
 			}
-			pos.offset += desc.size
+			pos.offset += valSize
 			subs.push({
-				type: desc.type,
-				size: desc.size,
+				type: valType,
+				size: valSize,
 				bytes: valBytes,
-				rendered: this.renderSubstitutionValue(
-					valBytes,
-					desc.type,
-					chunkStart
-				)
+				rendered: null // lazy: rendered on first access in parseContent
 			})
 		}
 
@@ -613,7 +599,7 @@ export class BinXmlParser {
 	): string {
 		const pos: ParsePosition = {offset: 0}
 		const dv = new DataView(binxml.buffer, binxml.byteOffset, binxml.byteLength)
-		const parts: string[] = []
+		let result = ''
 
 		while (pos.offset < binxml.length) {
 			const tok = binxml[pos.offset] ?? 0
@@ -623,31 +609,27 @@ export class BinXmlParser {
 				break
 			}
 			if (base === TOKEN.FRAGMENT_HEADER) {
-				parts.push(
-					this.parseFragment(binxml, dv, pos, binxmlChunkBase)
-				)
+				result += this.parseFragment(binxml, dv, pos, binxmlChunkBase)
 			} else if (base === TOKEN.PI_TARGET) {
 				pos.offset++ // consume 0x0A
 				const piNameOff = dv.getUint32(pos.offset, true)
 				pos.offset += 4
 				const piName = this.readName(piNameOff)
-				let pi = `<?${piName}`
+				let pi = '<?' + piName
 				if (pos.offset < binxml.length && binxml[pos.offset] === TOKEN.PI_DATA) {
 					pos.offset++ // consume 0x0B
 					const piText = this.readUnicodeTextString(dv, binxml, pos)
-					if (piText) pi += ` ${piText}`
+					if (piText) pi += ' ' + piText
 				}
-				pi += '?>'
-				parts.push(pi)
+				result += pi + '?>'
 			} else {
-				parts.push(
-					`<!-- UNEXPECTED document token 0x${HEX[tok] ?? '??'} (${tokenName(tok)}) at offset ${pos.offset} -->`
-				)
+				result += '<!-- UNEXPECTED document token 0x' + (HEX[tok] ?? '??') +
+					' (' + tokenName(tok) + ') at offset ' + pos.offset + ' -->'
 				break
 			}
 		}
 
-		return parts.join('')
+		return result
 	}
 
 	private parseFragment(
@@ -676,7 +658,8 @@ export class BinXmlParser {
 		if (nextBase === TOKEN.OPEN_START_ELEMENT) {
 			return this.parseElement(binxml, dv, pos, null, binxmlChunkBase)
 		}
-		return `<!-- UNEXPECTED post-fragment token 0x${HEX[nextTok] ?? '??'} (${tokenName(nextTok)}) at offset ${pos.offset} -->\n`
+		return '<!-- UNEXPECTED post-fragment token 0x' + (HEX[nextTok] ?? '??') +
+			' (' + tokenName(nextTok) + ') at offset ' + pos.offset + ' -->\n'
 	}
 }
 
