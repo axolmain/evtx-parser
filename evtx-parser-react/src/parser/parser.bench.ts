@@ -1,8 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { afterAll, bench, describe } from 'vitest'
-import { discoverChunkOffsets, parseChunk, parseEventRecord, parseEvtx, parseFileHeader, preloadTemplateDefinitions } from './index'
+import { BinXmlParser, discoverChunkOffsets, parseChunk, parseEventRecord, parseEvtx, parseFileHeader, preloadTemplateDefinitions } from './index'
 import type { TemplateStats } from './index'
+import { parseEventXml } from './xml-helper'
 
 const DATA_DIR = path.resolve(__dirname, '../../tests/data')
 const RESULTS_FILE = path.resolve(DATA_DIR, '../benchmark-results.md')
@@ -157,6 +158,108 @@ if (evtxFiles.length === 0) {
 							tplStats.currentRecordId = r.recordId
 							parseEventRecord(r, chunkDv, chunkOffset, chunk.header, tplStats, ci)
 						}
+					}
+				})
+			})
+
+			// --- Granular breakdowns of parseEventRecord ---
+
+			bench('preloadTemplateDefinitions (all chunks)', () => {
+				timed(group, 'preloadTemplateDefinitions (all chunks)', () => {
+					const dv = new DataView(file.buffer)
+					const header = parseFileHeader(file.buffer, dv)
+					const offsets = discoverChunkOffsets(dv, header.headerBlockSize)
+					const tplStats: TemplateStats = {
+						definitions: {},
+						defsByOffset: {},
+						definitionCount: 0,
+						references: [],
+						referenceCount: 0,
+						missingRefs: [],
+						missingCount: 0,
+						currentRecordId: 0,
+						parseErrors: []
+					}
+					for (const chunkOffset of offsets) {
+						tplStats.defsByOffset = {}
+						const chunk = parseChunk(file.buffer, dv, chunkOffset)
+						const chunkDv = new DataView(file.buffer, chunkOffset, 65_536)
+						preloadTemplateDefinitions(chunkDv, chunk.header, tplStats)
+					}
+				})
+			})
+
+			bench('BinXmlParser.parseDocument (all records)', () => {
+				timed(group, 'BinXmlParser.parseDocument (all records)', () => {
+					const dv = new DataView(file.buffer)
+					const header = parseFileHeader(file.buffer, dv)
+					const offsets = discoverChunkOffsets(dv, header.headerBlockSize)
+					const tplStats: TemplateStats = {
+						definitions: {},
+						defsByOffset: {},
+						definitionCount: 0,
+						references: [],
+						referenceCount: 0,
+						missingRefs: [],
+						missingCount: 0,
+						currentRecordId: 0,
+						parseErrors: []
+					}
+					for (const chunkOffset of offsets) {
+						tplStats.defsByOffset = {}
+						const chunk = parseChunk(file.buffer, dv, chunkOffset)
+						const chunkDv = new DataView(file.buffer, chunkOffset, 65_536)
+						preloadTemplateDefinitions(chunkDv, chunk.header, tplStats)
+						const parser = new BinXmlParser(chunkDv, chunk.header, tplStats)
+						for (const r of chunk.records) {
+							tplStats.currentRecordId = r.recordId
+							const binxmlChunkBase = r.chunkOffset + 24
+							parser.parseDocument(r.binxmlBytes, chunkOffset, binxmlChunkBase)
+						}
+					}
+				})
+			})
+
+			// Pre-parse all XML strings once so parseEventXml bench only measures field extraction
+			const precomputedXml: string[] = (() => {
+				const dv = new DataView(file.buffer)
+				const header = parseFileHeader(file.buffer, dv)
+				const offsets = discoverChunkOffsets(dv, header.headerBlockSize)
+				const xmlStrings: string[] = []
+				const tplStats: TemplateStats = {
+					definitions: {},
+					defsByOffset: {},
+					definitionCount: 0,
+					references: [],
+					referenceCount: 0,
+					missingRefs: [],
+					missingCount: 0,
+					currentRecordId: 0,
+					parseErrors: []
+				}
+				for (const chunkOffset of offsets) {
+					tplStats.defsByOffset = {}
+					const chunk = parseChunk(file.buffer, dv, chunkOffset)
+					const chunkDv = new DataView(file.buffer, chunkOffset, 65_536)
+					preloadTemplateDefinitions(chunkDv, chunk.header, tplStats)
+					const parser = new BinXmlParser(chunkDv, chunk.header, tplStats)
+					for (const r of chunk.records) {
+						tplStats.currentRecordId = r.recordId
+						const binxmlChunkBase = r.chunkOffset + 24
+						try {
+							xmlStrings.push(parser.parseDocument(r.binxmlBytes, chunkOffset, binxmlChunkBase))
+						} catch {
+							xmlStrings.push('')
+						}
+					}
+				}
+				return xmlStrings
+			})()
+
+			bench('parseEventXml (all records)', () => {
+				timed(group, 'parseEventXml (all records)', () => {
+					for (const xml of precomputedXml) {
+						if (xml) parseEventXml(xml)
 					}
 				})
 			})
