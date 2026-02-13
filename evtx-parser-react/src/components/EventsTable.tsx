@@ -1,15 +1,14 @@
-import {Badge, Code} from '@mantine/core'
-import {useLocalStorage} from '@mantine/hooks'
-import type {ExpandedState} from '@tanstack/react-table'
+import { Badge, Code } from '@mantine/core'
+import { useLocalStorage } from '@mantine/hooks'
+import type { ExpandedState } from '@tanstack/react-table'
 import {
 	MantineReactTable,
 	type MRT_ColumnDef,
 	type MRT_VisibilityState,
 	useMantineReactTable
 } from 'mantine-react-table'
-import {useEffect, useMemo, useState} from 'react'
-import type {ParsedEventRecord} from '@/parser'
-import './EventsTable.css'
+import { useEffect, useMemo, useState } from 'react'
+import type { ParsedEventRecord } from '@/parser'
 
 interface Properties {
 	records: ParsedEventRecord[]
@@ -17,11 +16,11 @@ interface Properties {
 }
 
 const LEVEL_COLORS: Record<number, string> = {
-	1: 'red', // Critical
-	2: 'orange', // Error
-	3: 'yellow', // Warning
-	4: 'blue', // Information
-	5: 'gray' // Verbose
+	1: 'red',
+	2: 'orange',
+	3: 'yellow',
+	4: 'blue',
+	5: 'gray'
 }
 
 const DEFAULT_HIDDEN: MRT_VisibilityState = {
@@ -35,8 +34,16 @@ const DEFAULT_HIDDEN: MRT_VisibilityState = {
 	securityUserId: false,
 	activityId: false,
 	relatedActivityId: false,
-	channel: false, // Hide channel by default - less critical
-	eventData: false // Hide event data - better viewed in detail panel
+	channel: false,
+	eventData: false
+}
+
+const LEVEL_SORT: Record<string, number> = {
+	Critical: 1,
+	Error: 2,
+	Warning: 3,
+	Information: 4,
+	Verbose: 5
 }
 
 export function EventsTable({records, selectedRecordId}: Properties) {
@@ -47,26 +54,15 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 		})
 	const [expanded, setExpanded] = useState<ExpandedState>({})
 
-	// Scroll to and expand row when selectedRecordId changes
 	useEffect(() => {
-		if (selectedRecordId === null || selectedRecordId === undefined) return
+		if (selectedRecordId === null) return
 		const rowIndex = records.findIndex(r => r.recordId === selectedRecordId)
 		if (rowIndex === -1) return
 		setExpanded({[rowIndex]: true})
-		// Wait for render then scroll to the row
 		requestAnimationFrame(() => {
-			const tableContainer = document.querySelector(
-				'.mrt-table-container, [class*="TableContainer"]'
-			)
-			const rows = tableContainer?.querySelectorAll('tbody tr')
-			if (rows) {
-				for (const row of rows) {
-					if (row.textContent?.includes(String(selectedRecordId))) {
-						row.scrollIntoView({behavior: 'smooth', block: 'center'})
-						break
-					}
-				}
-			}
+			document
+				.querySelector(`[data-index="${rowIndex}"]`)
+				?.scrollIntoView({behavior: 'smooth', block: 'center'})
 		})
 	}, [selectedRecordId, records])
 
@@ -77,6 +73,7 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 				header: 'Record ID',
 				size: 90,
 				minSize: 90,
+				enableColumnFilter: false,
 				mantineTableBodyCellProps: {fz: 'sm', c: 'dimmed'}
 			},
 			{
@@ -84,13 +81,18 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 				header: 'Time',
 				size: 160,
 				minSize: 120,
+				enableColumnFilter: false,
 				mantineTableBodyCellProps: {ff: 'monospace', fz: 'sm'}
 			},
 			{
-				accessorKey: 'level',
+				accessorKey: 'levelText',
 				header: 'Level',
 				size: 100,
 				minSize: 85,
+				filterVariant: 'multi-select',
+				sortingFn: (a, b) =>
+					(LEVEL_SORT[a.original.levelText] ?? 99) -
+					(LEVEL_SORT[b.original.levelText] ?? 99),
 				Cell: ({row}) => (
 					<Badge
 						color={LEVEL_COLORS[row.original.level] ?? 'gray'}
@@ -106,6 +108,7 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 				header: 'Event ID',
 				size: 85,
 				minSize: 90,
+				filterVariant: 'multi-select',
 				mantineTableBodyCellProps: {fz: 'sm', fw: 500}
 			},
 			{
@@ -113,6 +116,7 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 				header: 'Provider',
 				size: 200,
 				minSize: 120,
+				filterVariant: 'multi-select',
 				mantineTableBodyCellProps: {fz: 'sm'}
 			},
 			{
@@ -120,6 +124,7 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 				header: 'Channel',
 				size: 140,
 				minSize: 100,
+				filterVariant: 'multi-select',
 				mantineTableBodyCellProps: {fz: 'sm', c: 'dimmed'}
 			},
 			{
@@ -155,6 +160,7 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 				header: 'Computer',
 				size: 140,
 				minSize: 100,
+				filterVariant: 'multi-select',
 				mantineTableBodyCellProps: {fz: 'sm'}
 			},
 			{
@@ -197,6 +203,7 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 				header: 'Event Data',
 				size: 250,
 				minSize: 120,
+				enableColumnFilter: false,
 				mantineTableBodyCellProps: {
 					fz: 'xs',
 					c: 'dimmed',
@@ -210,10 +217,8 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 	const table = useMantineReactTable({
 		columns,
 		data: records,
-		enablePagination: false,
-		enableGlobalFilter: false,
-		enableColumnFilters: false,
-		enableColumnOrdering: true,
+		enableColumnFilterModes: true,
+		enableFacetedValues: true,
 		enableColumnResizing: true,
 		enableStickyHeader: true,
 		enableDensityToggle: true,
@@ -221,15 +226,25 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 		state: {columnVisibility, expanded},
 		onColumnVisibilityChange: setColumnVisibility,
 		onExpandedChange: setExpanded,
-		initialState: {density: 'xs'},
+		initialState: {
+			density: 'xs',
+			showGlobalFilter: true,
+			pagination: {pageIndex: 0, pageSize: 50},
+		},
+		paginationDisplayMode: 'pages',
+		mantinePaginationProps: {
+			radius: 'md',
+			size: 'sm',
+		},
+		mantineSearchTextInputProps: {
+			placeholder: 'Search events...',
+		},
 		mantineTableProps: {
 			striped: 'odd',
 			highlightOnHover: true,
 			withTableBorder: true,
-			withColumnBorders: false // Remove column borders for cleaner look
 		},
 		mantineTableHeadCellProps: {
-			// Smaller, more compact header styling
 			style: {fontSize: '0.8rem'},
 			className: 'compact-table-header'
 		},
@@ -239,14 +254,10 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 				{row.original.xml}
 			</Code>
 		),
-		mantineTableBodyRowProps: () => ({
-			style: {cursor: 'pointer'}
-		})
+		mantineTableBodyRowProps: {style: {cursor: 'pointer'}}
 	})
 
-	if (records.length === 0) {
-		return null
-	}
+	if (records.length === 0) return null
 
 	return <MantineReactTable table={table} />
 }

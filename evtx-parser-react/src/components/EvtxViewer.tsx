@@ -203,7 +203,7 @@ export function EvtxViewer({
 							text={result.xml}
 						/>
 						<Text c='dimmed' ml='auto' size='sm'>
-							Showing {displayRecords.length} of {filteredRecords.length} events
+							{filteredRecords.length} of {records.length} events
 						</Text>
 					</Group>
 
@@ -217,7 +217,7 @@ export function EvtxViewer({
 					)}
 					{viewMode === 'table' && (
 						<EventsTable
-							records={displayRecords}
+							records={filteredRecords}
 							selectedRecordId={selectedRecordId}
 						/>
 					)}
@@ -230,7 +230,7 @@ export function EvtxViewer({
 							totalRecords={result.totalRecords}
 							tplStats={result.tplStats}
 						/>
-						{pagination.showPagination && (
+						{viewMode === 'viewer' && pagination.showPagination && (
 							<PaginationBar
 								currentPage={pagination.currentPage}
 								end={pagination.end}
