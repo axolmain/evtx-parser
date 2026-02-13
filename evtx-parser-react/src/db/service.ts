@@ -108,6 +108,12 @@ export async function getFile(id: string): Promise<StoredFile | undefined> {
 	return db.files.get(id)
 }
 
+/** Read only the blob from a stored file — avoids deserializing parsedData */
+export async function getFileBlob(id: string): Promise<Blob | undefined> {
+	const file = await db.files.get(id)
+	return file?.blob
+}
+
 export async function getFilesByArchive(
 	archiveId: string
 ): Promise<StoredFile[]> {

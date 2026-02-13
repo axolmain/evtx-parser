@@ -49,23 +49,14 @@ export function useFileLoader(
 		try {
 			switch (fileType) {
 				case 'evtx': {
+					// Always parse from blob — faster than DB deserialization of parsed records
 					const t1 = performance.now()
-					const storedFile = await dbService.getFile(fileId)
-					console.log(`[nav] ${fileName} DB read: ${(performance.now() - t1).toFixed(1)}ms`)
-
-					if (storedFile?.parsedData) {
-						const parsedData = storedFile.parsedData as EvtxCacheData
-						setCachedContent(archiveId, fileName, 'evtx', parsedData)
-						setData(parsedData)
-						setIsLoading(false)
-						console.log(`[nav] ${fileName} DB cache total: ${(performance.now() - t0).toFixed(1)}ms`)
-						return
-					}
-
-					if (!storedFile) throw new Error('File not found in database')
+					const blob = await dbService.getFileBlob(fileId)
+					if (!blob) throw new Error('File not found in database')
+					console.log(`[nav] ${fileName} DB blob: ${(performance.now() - t1).toFixed(1)}ms`)
 
 					const t2 = performance.now()
-					const buffer = await storedFile.blob.arrayBuffer()
+					const buffer = await blob.arrayBuffer()
 					console.log(`[nav] ${fileName} blob→buffer: ${(performance.now() - t2).toFixed(1)}ms`)
 
 					const t3 = performance.now()
@@ -82,9 +73,8 @@ export function useFileLoader(
 					setCachedContent(archiveId, fileName, 'evtx', evtxData)
 					setData(evtxData)
 
-					// Defer DB write and indexing
+					// Defer indexing only
 					requestIdleCallback(() => {
-						dbService.updateFileParsedData(fileId, evtxData).catch(() => {})
 						dbService.isFileIndexed(fileId).then(isIndexed => {
 							if (!isIndexed) {
 								dbService.getArchive(archiveId).then(archive => {
