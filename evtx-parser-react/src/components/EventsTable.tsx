@@ -73,24 +73,18 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 			{
 				accessorKey: 'recordId',
 				header: 'Record ID',
-				size: 90,
-				minSize: 90,
 				enableColumnFilter: false,
 				mantineTableBodyCellProps: {fz: 'sm', c: 'dimmed'}
 			},
 			{
 				accessorKey: 'timestamp',
 				header: 'Time',
-				size: 160,
-				minSize: 120,
 				enableColumnFilter: false,
 				mantineTableBodyCellProps: {ff: 'monospace', fz: 'sm'}
 			},
 			{
 				accessorKey: 'levelText',
 				header: 'Level',
-				size: 100,
-				minSize: 85,
 				filterVariant: 'multi-select',
 				sortingFn: (a, b) =>
 					(LEVEL_SORT[a.original.levelText] ?? 99) -
@@ -108,108 +102,81 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 			{
 				accessorKey: 'eventId',
 				header: 'Event ID',
-				size: 85,
-				minSize: 90,
 				filterVariant: 'multi-select',
 				mantineTableBodyCellProps: {fz: 'sm', fw: 500}
 			},
 			{
 				accessorKey: 'provider',
 				header: 'Provider',
-				size: 200,
-				minSize: 120,
 				filterVariant: 'multi-select',
 				mantineTableBodyCellProps: {fz: 'sm'}
 			},
 			{
 				accessorKey: 'channel',
 				header: 'Channel',
-				size: 140,
-				minSize: 100,
 				filterVariant: 'multi-select',
 				mantineTableBodyCellProps: {fz: 'sm', c: 'dimmed'}
 			},
 			{
 				accessorKey: 'task',
 				header: 'Task',
-				size: 80,
-				minSize: 70,
 				mantineTableBodyCellProps: {fz: 'sm'}
 			},
 			{
 				accessorKey: 'opcode',
 				header: 'Opcode',
-				size: 90,
-				minSize: 90,
 				mantineTableBodyCellProps: {fz: 'sm'}
 			},
 			{
 				accessorKey: 'keywords',
 				header: 'Keywords',
-				size: 140,
-				minSize: 100,
 				mantineTableBodyCellProps: {ff: 'monospace', fz: 'xs', c: 'dimmed'}
 			},
 			{
 				accessorKey: 'version',
 				header: 'Ver',
-				size: 60,
-				minSize: 50,
 				mantineTableBodyCellProps: {fz: 'sm', c: 'dimmed'}
 			},
 			{
 				accessorKey: 'computer',
 				header: 'Computer',
-				size: 140,
-				minSize: 100,
 				filterVariant: 'multi-select',
 				mantineTableBodyCellProps: {fz: 'sm'}
 			},
 			{
 				accessorKey: 'processId',
 				header: 'PID',
-				size: 75,
-				minSize: 60,
 				mantineTableBodyCellProps: {ff: 'monospace', fz: 'xs', c: 'dimmed'}
 			},
 			{
 				accessorKey: 'threadId',
 				header: 'TID',
-				size: 75,
-				minSize: 60,
 				mantineTableBodyCellProps: {ff: 'monospace', fz: 'xs', c: 'dimmed'}
 			},
 			{
 				accessorKey: 'securityUserId',
 				header: 'User ID',
-				size: 180,
-				minSize: 100,
 				mantineTableBodyCellProps: {ff: 'monospace', fz: 'xs', c: 'dimmed'}
 			},
 			{
 				accessorKey: 'activityId',
 				header: 'Activity ID',
-				size: 140,
-				minSize: 110,
 				mantineTableBodyCellProps: {ff: 'monospace', fz: 'xs', c: 'dimmed'}
 			},
 			{
 				accessorKey: 'relatedActivityId',
 				header: 'Related Activity',
-				size: 140,
-				minSize: 130,
 				mantineTableBodyCellProps: {ff: 'monospace', fz: 'xs', c: 'dimmed'}
 			},
 			{
 				accessorKey: 'eventData',
 				header: 'Event Data',
-				size: 250,
-				minSize: 120,
+				size: 400,
 				enableColumnFilter: false,
 				mantineTableBodyCellProps: {
 					fz: 'xs',
 					c: 'dimmed',
-					style: {whiteSpace: 'pre-wrap' as const}
+					style: {whiteSpace: 'pre-wrap' as const, maxWidth: 400}
 				}
 			}
 		],
@@ -248,8 +215,11 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 			style: {minWidth: 'max-content'},
 		},
 		mantineTableHeadCellProps: {
-			style: {fontSize: '0.8rem'},
+			style: {fontSize: '0.8rem', whiteSpace: 'nowrap'},
 			className: 'compact-table-header'
+		},
+		mantineTableBodyCellProps: {
+			style: {whiteSpace: 'nowrap'}
 		},
 		mantineTableContainerProps: {style: {maxHeight: '600px', overflowX: 'auto'}},
 		renderDetailPanel: ({row}) => (
