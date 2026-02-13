@@ -1,47 +1,19 @@
-import {type ReactNode, useEffect} from 'react'
-import {
-	AppShell,
-	Burger,
-	Group,
-	ScrollArea,
-	Text,
-} from '@mantine/core'
-import {useLocalStorage, useViewportSize} from '@mantine/hooks'
+import {type ReactNode} from 'react'
+import {AppShell, Burger, Group, ScrollArea, Text} from '@mantine/core'
+import {useNavbar} from '@/contexts/NavbarContext'
 
 interface AppShellWrapperProps {
 	children: ReactNode
 	showNavbar?: boolean
 	navbarContent?: ReactNode
-	closeNavbarRef?: React.MutableRefObject<() => void>
 }
 
 export function AppShellWrapper({
 	children,
 	showNavbar = false,
 	navbarContent,
-	closeNavbarRef,
 }: AppShellWrapperProps) {
-	const [navbarOpen, setNavbarOpen] = useLocalStorage<boolean>({
-		key: 'evtx-navbar-open',
-		defaultValue: false,
-	})
-
-	const viewport = useViewportSize()
-	const isMobile = viewport.width < 768
-
-	const handleNavbarToggle = () => {
-		setNavbarOpen(!navbarOpen)
-	}
-
-	useEffect(() => {
-		if (closeNavbarRef) {
-			closeNavbarRef.current = () => {
-				if (isMobile && navbarOpen) {
-					setNavbarOpen(false)
-				}
-			}
-		}
-	}, [isMobile, navbarOpen, closeNavbarRef])
+	const {mobileOpened, toggleMobile, desktopOpened, toggleDesktop} = useNavbar()
 
 	return (
 		<AppShell
@@ -49,26 +21,22 @@ export function AppShellWrapper({
 			navbar={{
 				width: 300,
 				breakpoint: 'sm',
-				collapsed: {mobile: !navbarOpen, desktop: !navbarOpen},
+				collapsed: {mobile: !mobileOpened, desktop: !desktopOpened},
 			}}
 			padding="md"
 			layout="alt"
 		>
 			<AppShell.Header>
-				<Group h="100%" px="md" justify="space-between">
-					<Group>
-						{showNavbar && (
-							<Burger
-								opened={navbarOpen}
-								onClick={handleNavbarToggle}
-								size="sm"
-								aria-label="Toggle navigation"
-							/>
-						)}
-						<Text size="xl" fw={700}>
-							EVTX Parser
-						</Text>
-					</Group>
+				<Group h="100%" px="md">
+					{showNavbar && (
+						<>
+							<Burger opened={mobileOpened} onClick={toggleMobile} hiddenFrom="sm" size="sm" />
+							<Burger opened={desktopOpened} onClick={toggleDesktop} visibleFrom="sm" size="sm" />
+						</>
+					)}
+					<Text size="xl" fw={700}>
+						EVTX Parser
+					</Text>
 				</Group>
 			</AppShell.Header>
 

@@ -9,16 +9,16 @@ import {
 	Text,
 	Title,
 } from '@mantine/core'
-import {spotlight} from '@mantine/spotlight'
-import {IconRefresh, IconSearch} from '@tabler/icons-react'
-import {Outlet, useParams, useRouter} from '@tanstack/react-router'
-import {useEffect, useState} from 'react'
-import {ZipFileBrowser} from '@/components/ZipFileBrowser'
-import {useCache} from '@/contexts/CacheContext'
-import {useNavbar} from '@/contexts/NavbarContext'
-import type {Archive} from '@/db/schema'
+import { spotlight } from '@mantine/spotlight'
+import { IconRefresh, IconSearch } from '@tabler/icons-react'
+import { Outlet, useParams, useRouter } from '@tanstack/react-router'
+import { useEffect, useState } from 'react'
+import { ZipFileBrowser } from '@/components/ZipFileBrowser'
+import { useCache } from '@/contexts/CacheContext'
+import { useNavbar } from '@/contexts/NavbarContext'
+import type { Archive } from '@/db/schema'
 import * as dbService from '@/db/service'
-import type {FileType} from '@/lib/fileTypes'
+import type { FileType } from '@/lib/fileTypes'
 
 export interface ArchiveFileEntry {
 	name: string
@@ -31,7 +31,7 @@ export function ArchiveLayout() {
 	const router = useRouter()
 	const {archiveId} = useParams({strict: false}) as {archiveId: string}
 	const {clearCaches, cacheStats} = useCache()
-	const {setNavbarContent, closeNavbarRef} = useNavbar()
+	const {setNavbarContent, closeMobile} = useNavbar()
 	const [archive, setArchive] = useState<Archive | null>(null)
 	const [entries, setEntries] = useState<ArchiveFileEntry[]>([])
 	const [loading, setLoading] = useState(true)
@@ -81,7 +81,7 @@ export function ArchiveLayout() {
 
 	const handleFileClick = async (fileName: string) => {
 		setCurrentFileName(fileName)
-		closeNavbarRef.current() // Auto-close navbar on mobile
+		closeMobile() // Auto-close navbar on mobile
 		await router.navigate({
 			to: '/archive/$archiveId/file/$fileName',
 			params: {archiveId, fileName},

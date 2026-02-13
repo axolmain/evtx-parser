@@ -9,7 +9,7 @@ export function RootLayout() {
 	const isArchiveRoute = matches.some((match) =>
 		match.pathname.startsWith('/archive/'),
 	)
-	const {navbarContent, closeNavbarRef} = useNavbar()
+	const {navbarContent} = useNavbar()
 
 	return (
 		<>
@@ -17,7 +17,6 @@ export function RootLayout() {
 			<AppShellWrapper
 				showNavbar={isArchiveRoute}
 				navbarContent={navbarContent}
-				closeNavbarRef={closeNavbarRef}
 			>
 				<Outlet />
 			</AppShellWrapper>

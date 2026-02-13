@@ -1,12 +1,12 @@
-import {Box, Divider, Loader, Stack, Text, Title} from '@mantine/core'
-import {Dropzone} from '@mantine/dropzone'
-import {useRouter} from '@tanstack/react-router'
-import {useEffect, useState} from 'react'
-import {ArchiveManager} from '@/components/ArchiveManager'
-import {useStandaloneFile} from '@/contexts/StandaloneFileContext'
-import type {Archive} from '@/db/schema'
+import { Box, Divider, Loader, Stack, Text, Title } from '@mantine/core'
+import { Dropzone } from '@mantine/dropzone'
+import { useRouter } from '@tanstack/react-router'
+import { useEffect, useState } from 'react'
+import { ArchiveManager } from '@/components/ArchiveManager'
+import { useStandaloneFile } from '@/contexts/StandaloneFileContext'
+import type { Archive } from '@/db/schema'
 import * as dbService from '@/db/service'
-import {uploadZipFile} from '@/lib/zipUploader'
+import { uploadZipFile } from '@/lib/zipUploader'
 
 export function HomePage() {
 	const router = useRouter()
@@ -74,7 +74,6 @@ export function HomePage() {
 	}
 
 	return (
-		<Box maw={1400} mx='auto' p='2rem' style={{minHeight: '100vh'}}>
 			<Stack gap='xl'>
 				<Stack align='center' gap='md'>
 					<Title order={1}>SysInfoZip / EVTX Viewer</Title>
@@ -142,6 +141,5 @@ export function HomePage() {
 					</>
 				)}
 			</Stack>
-		</Box>
 	)
 }

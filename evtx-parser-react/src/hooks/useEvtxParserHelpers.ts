@@ -1,4 +1,4 @@
-import type {EvtxParseResult} from '@/parser'
+import type { EvtxParseResult } from '@/parser'
 
 export interface ParseTimedResult {
 	parseTime: number
@@ -16,7 +16,7 @@ function getWorker(): Worker {
 	return worker
 }
 
-export function parseBuffer(buffer: ArrayBuffer): Promise<ParseTimedResult> {
+export function parseFileBuffer(buffer: ArrayBuffer): Promise<ParseTimedResult> {
 	return new Promise((resolve, reject) => {
 		const w = getWorker()
 		const t0 = performance.now()

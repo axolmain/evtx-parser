@@ -1,29 +1,38 @@
 import {
 	createContext,
 	useContext,
-	useRef,
 	useState,
 	type ReactNode,
 } from 'react'
+import {useDisclosure} from '@mantine/hooks'
 
 interface NavbarContextType {
 	navbarContent: ReactNode | null
 	setNavbarContent: (content: ReactNode | null) => void
-	closeNavbarRef: React.MutableRefObject<() => void>
+	mobileOpened: boolean
+	toggleMobile: () => void
+	desktopOpened: boolean
+	toggleDesktop: () => void
+	closeMobile: () => void
 }
 
 const NavbarContext = createContext<NavbarContextType | null>(null)
 
 export function NavbarProvider({children}: {children: ReactNode}) {
 	const [navbarContent, setNavbarContent] = useState<ReactNode | null>(null)
-	const closeNavbarRef = useRef<() => void>(() => {})
+	const [mobileOpened, {toggle: toggleMobile, close: closeMobile}] = useDisclosure()
+	const [desktopOpened, {toggle: toggleDesktop}] = useDisclosure()
 
 	return (
 		<NavbarContext.Provider
 			value={{
 				navbarContent,
 				setNavbarContent,
-				closeNavbarRef,
+				mobileOpened,
+				toggleMobile,
+				desktopOpened,
+				toggleDesktop,
+				closeMobile,
 			}}
 		>
 			{children}

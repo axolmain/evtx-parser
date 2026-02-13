@@ -1,6 +1,6 @@
-import {useCallback, useEffect, useRef, useState} from 'react'
-import type {EvtxParseResult} from '@/parser'
-import {disposeWorker, parseBuffer} from './useEvtxParserHelpers'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { EvtxParseResult } from '@/parser'
+import { disposeWorker, parseFileBuffer } from './useEvtxParserHelpers'
 
 type ParseState =
 	| {status: 'idle'}
@@ -41,7 +41,7 @@ export function useEvtxParser() {
 			const fileName = file.name.replace(EVTX_EXT_RE, '')
 
 			setState({status: 'parsing'})
-			const {result, parseTime} = await parseBuffer(buffer)
+			const {result, parseTime} = await parseFileBuffer(buffer)
 
 			if (!disposed.current) {
 				setState({status: 'done', result, fileName, fileSize, parseTime})

@@ -1,9 +1,9 @@
-import {useCallback, useEffect, useState} from 'react'
-import type {EvtxCacheData} from '@/contexts/CacheContext'
-import {useCache} from '@/contexts/CacheContext'
+import { useCallback, useEffect, useState } from 'react'
+import type { EvtxCacheData } from '@/contexts/CacheContext'
+import { useCache } from '@/contexts/CacheContext'
 import * as dbService from '@/db/service'
-import {parseBuffer} from '@/hooks/useEvtxParserHelpers'
-import type {FileType} from '@/lib/fileTypes'
+import { parseFileBuffer } from '@/hooks/useEvtxParserHelpers'
+import type { FileType } from '@/lib/fileTypes'
 
 interface FileLoaderResult {
 	data: EvtxCacheData | unknown | string | null
@@ -54,7 +54,7 @@ export function useFileLoader(
 					if (!storedFile) throw new Error('File not found in database')
 
 					const buffer = await storedFile.blob.arrayBuffer()
-					const {result, parseTime} = await parseBuffer(buffer)
+					const {result, parseTime} = await parseFileBuffer(buffer)
 
 					const evtxData: EvtxCacheData = {
 						result,
