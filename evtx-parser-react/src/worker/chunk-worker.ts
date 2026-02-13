@@ -1,4 +1,4 @@
-import {parseBinXmlDocument} from '@/parser/binxml'
+import {BinXmlParser} from '@/parser/binxml'
 import {
 	parseChunk,
 	preloadTemplateDefinitions,
@@ -116,6 +116,8 @@ function handleChunk(
 
 		preloadTemplateDefinitions(chunkDv, chunk.header, tplStats)
 
+		const parser = new BinXmlParser(chunkDv, chunk.header, tplStats)
+
 		const chunkHeaderText = `${formatChunkHeaderComment(chunkIndex, adjHeader)}\n\n`
 		const recordOutputs: string[] = []
 		const parsedRecords: ParsedEventRecord[] = []
@@ -128,12 +130,9 @@ function handleChunk(
 
 			let parsedXml = ''
 			try {
-				parsedXml = parseBinXmlDocument(
+				parsedXml = parser.parseDocument(
 					r.binxmlBytes,
-					chunkDv,
 					chunkStart,
-					chunk.header,
-					tplStats,
 					binxmlChunkBase
 				)
 			} catch (e) {

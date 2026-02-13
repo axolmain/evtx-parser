@@ -1,7 +1,7 @@
-import {parseBinXmlDocument} from './binxml'
-import {HEX} from './constants'
+import { BinXmlParser } from './binxml'
+import { HEX } from './constants'
 // import {formatChunkHeaderComment, formatRecordComment} from './format'
-import {formatGuid} from './helpers'
+import { formatGuid } from './helpers'
 import type {
 	ChunkHeader,
 	EvtxParseResult,
@@ -11,7 +11,7 @@ import type {
 	ParsedEventRecord,
 	TemplateStats
 } from './types'
-import {parseEventXml} from './xml-helper'
+import { parseEventXml } from './xml-helper'
 
 const LEVEL_NAMES: Record<number, string> = {
 	1: 'Critical',
@@ -42,18 +42,30 @@ function filetimeToIso(dv: DataView, offset: number): string {
 }
 
 export function parseFileHeader(
-	buffer: ArrayBuffer | SharedArrayBuffer,
-	dv: DataView
+    buffer: ArrayBuffer | SharedArrayBuffer,
+	dv: DataView | undefined
 ): FileHeader {
-	const sig = new TextDecoder().decode(new Uint8Array(buffer, 0, 8))
-	if (!sig.startsWith('ElfFile')) throw new Error('Not a valid EVTX file')
-	const flags = dv.getUint32(120, true)
-	return {
-		headerBlockSize: dv.getUint16(40, true),
-		flags,
-		isDirty: Boolean(flags & 0x01),
-		isFull: Boolean(flags & 0x02)
-	}
+    // Single DataView instead of 3 typed array allocations
+    dv ??= new DataView(buffer, 0, 124);
+
+    // "ElfFile" magic in 3 comparisons instead of 7:
+    // Big-endian reads so bytes compare in natural order
+    if (
+        dv.getUint32(0, false) !== 0x456C6646 || // "ElfF"
+        dv.getUint16(4, false) !== 0x696C ||      // "il"
+        dv.getUint8(6) !== 0x65                    // "e"
+    ) throw new Error('Not a valid EVTX file');
+
+    // locations found @ https://github.com/libyal/libevtx/blob/main/documentation/Windows%20XML%20Event%20Log%20(EVTX).asciidoc#2-file-header
+    const headerBlockSize = dv.getUint16(40, true);
+    const flags = dv.getUint32(120, true);
+
+    return {
+        headerBlockSize,
+        flags,
+        isDirty: (flags & 0x01) !== 0,
+        isFull: (flags & 0x02) !== 0
+    };
 }
 
 export function parseChunkHeader(
@@ -206,14 +218,20 @@ export function parseChunk(
 }
 
 export function discoverChunkOffsets(
-	buffer: ArrayBuffer,
-	fileHeader: FileHeader
+	dv: DataView,
+	fileHeaderBlockSize: number
 ): number[] {
 	const offsets: number[] = []
-	let off = fileHeader.headerBlockSize
-	while (off + 65_536 <= buffer.byteLength) {
-		const csig = new TextDecoder().decode(new Uint8Array(buffer, off, 8))
-		if (csig.startsWith('ElfChnk')) offsets.push(off)
+	let off = fileHeaderBlockSize
+	while (off + 65_536 <= dv.byteLength) {
+		// "ElfChnk" magic in 3 comparisons instead of 7
+		if (
+			dv.getUint32(off, false) === 0x456C6643 && // "ElfC"
+			dv.getUint16(off + 4, false) === 0x686E && // "hn"
+			dv.getUint8(off + 6) === 0x6B              // "k"
+		) {
+			offsets.push(off)
+		}
 		off += 65_536
 	}
 	return offsets
@@ -266,10 +284,50 @@ export function preloadTemplateDefinitions(
 	}
 }
 
+export function parseEventRecord(
+	r: EvtxRecord,
+	chunkDv: DataView,
+	chunkOffset: number,
+	header: ChunkHeader,
+	tplStats: TemplateStats,
+	chunkIndex: number,
+	parser?: BinXmlParser
+): { xml: string; record: ParsedEventRecord } {
+	const binxmlChunkBase = r.chunkOffset + 24
+	const p = parser ?? new BinXmlParser(chunkDv, header, tplStats)
+
+	let parsedXml = ''
+	try {
+		parsedXml = p.parseDocument(
+			r.binxmlBytes,
+			chunkOffset,
+			binxmlChunkBase
+		)
+	} catch (e) {
+		parsedXml = `<!-- BinXml parse error: ${e instanceof Error ? e.message : String(e)} -->\n`
+		tplStats.parseErrors.push({
+			recordId: r.recordId,
+			error: e instanceof Error ? e.message : String(e)
+		})
+	}
+
+	const extracted = extractEventFields(parsedXml)
+	return {
+		xml: parsedXml,
+		record: {
+			recordId: r.recordId,
+			timestamp: r.timestamp,
+			xml: parsedXml,
+			chunkIndex,
+			...extracted
+		}
+	}
+}
+
 export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
 	const dv = new DataView(buffer)
-	const fileHeader = parseFileHeader(buffer, dv)
-	const chunkOffsets = discoverChunkOffsets(buffer, fileHeader)
+	const fileHeader: FileHeader = parseFileHeader(buffer, dv)
+	const chunkOffsets: number[] = discoverChunkOffsets(dv, fileHeader.headerBlockSize)
 
 	const tplStats: TemplateStats = {
 		definitions: {},
@@ -284,10 +342,11 @@ export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
 	}
 
 	let totalRecords = 0
-	const allWarnings: string[] = []
+	const allChunkWarnings: string[] = []
 	const recordOutputs: string[] = []
 	const parsedRecords: ParsedEventRecord[] = []
 
+	// parse the chunks
 	for (let ci = 0; ci < chunkOffsets.length; ci++) {
 		const chunkOffset = chunkOffsets[ci]!
 		tplStats.defsByOffset = {}
@@ -295,7 +354,7 @@ export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
 
 		const chunkWarnings = validateChunk(ci, chunk.header, chunk.records)
 		for (const w of chunkWarnings) {
-			allWarnings.push(w)
+			allChunkWarnings.push(w)
 		}
 
 		// const chunkHeaderText = `${formatChunkHeaderComment(ci, chunk.header)}\n\n`
@@ -304,55 +363,18 @@ export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
 
 		preloadTemplateDefinitions(chunkDv, chunk.header, tplStats)
 
+		const parser = new BinXmlParser(chunkDv, chunk.header, tplStats)
+
+		// parse the records
 		for (let ri = 0; ri < chunk.records.length; ri++) {
 			const r = chunk.records[ri]!
 			tplStats.currentRecordId = r.recordId
-			// const refsBefore = tplStats.referenceCount
 
-			const binxmlChunkBase = r.chunkOffset + 24
-
-			let parsedXml = ''
-			try {
-				parsedXml = parseBinXmlDocument(
-					r.binxmlBytes,
-					chunkDv,
-					chunkOffset,
-					chunk.header,
-					tplStats,
-					binxmlChunkBase
-				)
-			} catch (e) {
-				parsedXml = `<!-- BinXml parse error: ${e instanceof Error ? e.message : String(e)} -->\n`
-				tplStats.parseErrors.push({
-					recordId: r.recordId,
-					error: e instanceof Error ? e.message : String(e)
-				})
-			}
-
-			// let tplComment = ''
-			// const refsForRecord = tplStats.references.slice(refsBefore)
-			// if (refsForRecord.length > 0) {
-			// 	const ref = refsForRecord[0]!
-			// 	const def = tplStats.defsByOffset[ref.defDataOffset]
-			// 	tplComment = `<!-- template: guid=${ref.guid || '(back-ref)'} defOffset=${hex32(ref.defDataOffset)} dataSize=${ref.dataSize}${ref.isInline ? ' (INLINE definition)' : ` (back-reference${def ? `, defined in record ${def.firstSeenRecord}` : ''})`} -->\n`
-			// }
-
-			let recOut = ''
-			// if (ri === 0) recOut += chunkHeaderText
-			// recOut += `${formatRecordComment(r, ci)}\n`
-			// if (tplComment) recOut += tplComment
-			recOut += parsedXml
-			recordOutputs.push(recOut)
-
-			// Store structured record data for table view
-			const extracted = extractEventFields(parsedXml)
-			parsedRecords.push({
-				recordId: r.recordId,
-				timestamp: r.timestamp,
-				xml: parsedXml,
-				chunkIndex: ci,
-				...extracted
-			})
+			const { xml, record } = parseEventRecord(
+				r, chunkDv, chunkOffset, chunk.header, tplStats, ci, parser
+			)
+			recordOutputs.push(xml)
+			parsedRecords.push(record)
 		}
 
 		totalRecords += chunk.records.length
@@ -422,7 +444,7 @@ export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
 		xml: `${summaryText}${recordOutputs.join('\n\n')}\n\n</Events>`,
 		totalRecords,
 		numChunks: chunkOffsets.length,
-		warnings: allWarnings,
+		warnings: allChunkWarnings,
 		tplStats
 	}
 }

@@ -1,7 +1,8 @@
-export {parseBinXmlDocument} from './binxml'
+export {BinXmlParser, parseBinXmlDocument} from './binxml'
 export {
 	discoverChunkOffsets,
 	parseChunk,
+	parseEventRecord,
 	parseEvtx,
 	parseFileHeader,
 	preloadTemplateDefinitions,

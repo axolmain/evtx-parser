@@ -9,3 +9,8 @@ coverage
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Benchmark data & results
+tests/data/*
+!tests/data/.gitkeep
+# tests/benchmark-results.md

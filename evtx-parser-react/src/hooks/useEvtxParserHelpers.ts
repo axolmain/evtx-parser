@@ -1,9 +1,9 @@
-import type {EvtxParseResult, ParsedEventRecord} from '@/parser'
-import {discoverChunkOffsets, parseEvtx, parseFileHeader} from '@/parser'
-import type {ChunkParseSuccess} from '@/worker/protocol'
-import {mergeChunkResults} from '@/worker/merge'
-import {isSharedArrayBufferSupported} from '@/worker/shared-buffer'
-import {ChunkWorkerPool} from '@/worker/worker-pool'
+import type { EvtxParseResult, ParsedEventRecord } from '@/parser'
+import { discoverChunkOffsets, parseEvtx, parseFileHeader } from '@/parser'
+import type { ChunkParseSuccess } from '@/worker/protocol'
+import { mergeChunkResults } from '@/worker/merge'
+import { isSharedArrayBufferSupported } from '@/worker/shared-buffer'
+import { ChunkWorkerPool } from '@/worker/worker-pool'
 
 interface ParseTimedResult {
 	parseTime: number
@@ -38,7 +38,7 @@ async function parseWithWorkers(
 ): Promise<ParseTimedResult> {
 	const dv = new DataView(buffer)
 	const fileHeader = parseFileHeader(buffer, dv)
-	const chunkOffsets = discoverChunkOffsets(buffer, fileHeader)
+	const chunkOffsets = discoverChunkOffsets(dv, fileHeader.headerBlockSize)
 
 	// Optimize for SharedArrayBuffer mode:
 	// - If supported: Pass full buffer reference (no slicing)
@@ -90,7 +90,7 @@ export async function parseBufferStreaming(
 ): Promise<ParseTimedResult> {
 	const dv = new DataView(buffer)
 	const fileHeader = parseFileHeader(buffer, dv)
-	const chunkOffsets = discoverChunkOffsets(buffer, fileHeader)
+	const chunkOffsets = discoverChunkOffsets(dv, fileHeader.headerBlockSize)
 
 	const useSharedBuffer = isSharedArrayBufferSupported()
 
