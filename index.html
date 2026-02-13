@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<link rel="icon" type="image/png" href="/evtx-parser/favicon.png" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="description" content="EVTX Raw Dump — Parse Windows Event Log files offline" />
+		<meta name="theme-color" content="#1a1b1e" />
+		<link rel="apple-touch-icon" href="/evtx-parser/favicon.png" />
+		<title>EVTX Parser</title>
+		<script type="module" crossorigin src="/evtx-parser/assets/index-D8S4qUz2.js"></script>
+		<link rel="stylesheet" crossorigin href="/evtx-parser/assets/index-BMhc9z0m.css">
+	<link rel="manifest" href="/evtx-parser/manifest.webmanifest"></head>
+	<body>
+		<noscript>You need to enable JavaScript to run this app.</noscript>
+		<div id="root"></div>
+		<!-- COI Service Worker: Only register in production (not localhost) -->
+		<script>
+			if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+				if ('serviceWorker' in navigator) {
+					navigator.serviceWorker.register('/evtx-parser/coi-serviceworker.js')
+						.then(() => console.log('COI Service Worker registered'))
+						.catch(err => console.error('COI Service Worker registration failed:', err))
+				}
+			}
+		</script>
+	</body>
+</html>
