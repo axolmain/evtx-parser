@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
-import type { EvtxCacheData } from '@/contexts/CacheContext'
-import { useCache } from '@/contexts/CacheContext'
+import {useCallback, useEffect, useState} from 'react'
+import type {EvtxCacheData} from '@/contexts/CacheContext'
+import {useCache} from '@/contexts/CacheContext'
 import * as dbService from '@/db/service'
-import { parseFileBuffer } from '@/hooks/useEvtxParserHelpers'
-import type { FileType } from '@/lib/fileTypes'
+import {parseFileBuffer} from '@/hooks/useEvtxParserHelpers'
+import type {FileType} from '@/lib/fileTypes'
 
 interface FileLoaderResult {
 	data: EvtxCacheData | unknown | string | null
@@ -18,43 +18,59 @@ export function useFileLoader(
 	fileType: FileType
 ): FileLoaderResult {
 	const {getCachedContent, setCachedContent} = useCache()
-	const [data, setData] = useState<EvtxCacheData | unknown | string | null>(
-		null
-	)
-	const [isLoading, setIsLoading] = useState(true)
+
+	// Synchronous cache check during render — no loading flash for cached files
+	const cached = getCachedContent(archiveId, fileName, fileType)
+
+	const [data, setData] = useState<EvtxCacheData | unknown | string | null>(cached)
+	const [isLoading, setIsLoading] = useState(cached === null)
 	const [error, setError] = useState<string | null>(null)
 
 	const load = useCallback(async () => {
+		const t0 = performance.now()
+
+		// Check memory cache first — skip all loading state
+		const memoryCached = getCachedContent(archiveId, fileName, fileType)
+		if (memoryCached !== null) {
+			console.log(`[nav] ${fileName} cache hit: ${(performance.now() - t0).toFixed(1)}ms`)
+			setData(memoryCached)
+			setIsLoading(false)
+			setError(null)
+			return
+		}
+
+		// Not cached — show loading state
 		setIsLoading(true)
 		setError(null)
 		setData(null)
 
+		const fileId = dbService.generateFileId(archiveId, fileName)
+
 		try {
-			// Check memory cache first
-			const cached = getCachedContent(archiveId, fileName, fileType)
-			if (cached !== null) {
-				setData(cached)
-				setIsLoading(false)
-				return
-			}
-
-			const fileId = dbService.generateFileId(archiveId, fileName)
-
 			switch (fileType) {
 				case 'evtx': {
+					const t1 = performance.now()
 					const storedFile = await dbService.getFile(fileId)
+					console.log(`[nav] ${fileName} DB read: ${(performance.now() - t1).toFixed(1)}ms`)
+
 					if (storedFile?.parsedData) {
 						const parsedData = storedFile.parsedData as EvtxCacheData
 						setCachedContent(archiveId, fileName, 'evtx', parsedData)
 						setData(parsedData)
 						setIsLoading(false)
+						console.log(`[nav] ${fileName} DB cache total: ${(performance.now() - t0).toFixed(1)}ms`)
 						return
 					}
 
 					if (!storedFile) throw new Error('File not found in database')
 
+					const t2 = performance.now()
 					const buffer = await storedFile.blob.arrayBuffer()
+					console.log(`[nav] ${fileName} blob→buffer: ${(performance.now() - t2).toFixed(1)}ms`)
+
+					const t3 = performance.now()
 					const {result, parseTime} = await parseFileBuffer(buffer)
+					console.log(`[nav] ${fileName} parse: ${(performance.now() - t3).toFixed(1)}ms (worker: ${parseTime.toFixed(1)}ms)`)
 
 					const evtxData: EvtxCacheData = {
 						result,
@@ -64,26 +80,23 @@ export function useFileLoader(
 					}
 
 					setCachedContent(archiveId, fileName, 'evtx', evtxData)
-					await dbService.updateFileParsedData(fileId, evtxData)
 					setData(evtxData)
 
-					// Index events in background
-					const isIndexed = await dbService.isFileIndexed(fileId)
-					if (!isIndexed) {
-						const archive = await dbService.getArchive(archiveId)
-						if (evtxData.result) {
-							dbService
-								.indexEvtxEvents(
-									fileId,
-									archiveId,
-									archive?.name ?? '',
-									fileName,
-									evtxData.result.records
-								)
-								.catch(() => {})
-						}
-					}
+					// Defer DB write and indexing
+					requestIdleCallback(() => {
+						dbService.updateFileParsedData(fileId, evtxData).catch(() => {})
+						dbService.isFileIndexed(fileId).then(isIndexed => {
+							if (!isIndexed) {
+								dbService.getArchive(archiveId).then(archive => {
+									dbService
+										.indexEvtxEvents(fileId, archiveId, archive?.name ?? '', fileName, evtxData.result.records)
+										.catch(() => {})
+								})
+							}
+						})
+					})
 
+					console.log(`[nav] ${fileName} total: ${(performance.now() - t0).toFixed(1)}ms`)
 					break
 				}
 
@@ -148,5 +161,6 @@ export function useFileLoader(
 		load()
 	}, [load])
 
-	return {data, isLoading, error, reload: load}
+	// For cache hits: `cached` is non-null on first render, `data` follows on re-render
+	return {data: cached ?? data, isLoading: cached ? false : isLoading, error, reload: load}
 }

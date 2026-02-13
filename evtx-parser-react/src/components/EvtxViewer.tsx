@@ -27,42 +27,6 @@ interface EvtxViewerProps {
 }
 
 type StatusType = 'error' | 'info' | 'success'
-
-const PROGRESS_MAP: Record<string, number> = {
-	done: 100,
-	parsing: 50,
-	reading: 25
-}
-
-function getProgress(status: string): number {
-	return PROGRESS_MAP[status] ?? 0
-}
-
-function getStatusType(
-	state: ReturnType<typeof useEvtxParser>['state']
-): StatusType {
-	if (state.status === 'error') return 'error'
-	if (
-		state.status === 'done' &&
-		state.result.warnings.length === 0 &&
-		state.result.tplStats.missingCount === 0
-	) {
-		return 'success'
-	}
-	return 'info'
-}
-
-function getStatusMessage(
-	state: ReturnType<typeof useEvtxParser>['state']
-): string {
-	if (state.status === 'reading') return 'Reading file...'
-	if (state.status === 'parsing') return 'Parsing...'
-	if (state.status === 'done')
-		return `Parsed ${state.result.totalRecords} event records`
-	if (state.status === 'error') return state.error
-	return ''
-}
-
 type ViewMode = 'viewer' | 'table'
 
 export function EvtxViewer({
@@ -74,7 +38,7 @@ export function EvtxViewer({
 	onParseComplete,
 	selectedRecordId,
 }: EvtxViewerProps) {
-	const {state, parseFile} = useEvtxParser()
+	const {state, records: parserRecords, recordCount: parserRecordCount, parseFile} = useEvtxParser()
 	const [viewMode, setViewMode] = useState<ViewMode>('viewer')
 	const [searchQuery, setSearchQuery] = useState('')
 	const [selectedLevels, setSelectedLevels] = useState<number[]>([
@@ -98,10 +62,11 @@ export function EvtxViewer({
 		}
 	}, [state.status, state.result, state.fileName, onParseComplete, isParsedMode])
 
-	// Stable references for the two paths — avoids new object literal every render
 	const records: ParsedEventRecord[] = isParsedMode
 		? parsedResult.records
-		: state.status === 'done' ? state.result.records : []
+		: parserRecords
+	const recordCount = isParsedMode ? parsedResult.records.length : parserRecordCount
+
 	const result: EvtxParseResult | null = isParsedMode
 		? parsedResult
 		: state.status === 'done' ? state.result : null
@@ -109,6 +74,25 @@ export function EvtxViewer({
 	const effectiveFileSize = isParsedMode ? (propFileSize || 0) : (state.status === 'done' ? state.fileSize : 0)
 	const effectiveParseTime = isParsedMode ? (propParseTime || 0) : (state.status === 'done' ? state.parseTime : 0)
 	const isDone = isParsedMode || state.status === 'done'
+	const hasRecords = recordCount > 0
+
+	const progress =
+		state.status === 'reading' ? 5
+		: state.status === 'parsing' ? 5 + state.progress * 90
+		: state.status === 'done' ? 100
+		: 0
+
+	const statusMessage =
+		state.status === 'reading' ? 'Reading file...'
+		: state.status === 'parsing' ? `Parsing... ${state.recordCount.toLocaleString()} records`
+		: state.status === 'done' ? `Parsed ${state.result.totalRecords.toLocaleString()} event records`
+		: state.status === 'error' ? state.error
+		: ''
+
+	const statusType: StatusType =
+		state.status === 'error' ? 'error'
+		: state.status === 'done' && state.result.warnings.length === 0 && state.result.tplStats.missingCount === 0 ? 'success'
+		: 'info'
 
 	const buildXml = useCallback(() => {
 		if (records.length === 0) return ''
@@ -120,7 +104,9 @@ export function EvtxViewer({
 		return xml
 	}, [records])
 
+	// eslint-disable-next-line react-hooks/exhaustive-deps -- recordCount tracks mutation of records ref
 	const filteredRecords = useMemo(() => {
+		const t0 = performance.now()
 		if (records.length === 0) return records
 
 		const levelsSet = new Set(selectedLevels)
@@ -138,16 +124,20 @@ export function EvtxViewer({
 			)
 		}
 
+		console.log(`[render] filteredRecords: ${records.length} → ${filtered.length} in ${(performance.now() - t0).toFixed(1)}ms`)
 		return filtered
-	}, [records, searchQuery, selectedLevels])
+	}, [records, recordCount, searchQuery, selectedLevels])
 
+	// eslint-disable-next-line react-hooks/exhaustive-deps -- recordCount tracks mutation of records ref
 	const levelCounts = useMemo(() => {
+		const t0 = performance.now()
 		const counts: Record<number, number> = {}
 		for (const record of records) {
 			counts[record.level] = (counts[record.level] || 0) + 1
 		}
+		console.log(`[render] levelCounts: ${records.length} records in ${(performance.now() - t0).toFixed(1)}ms`)
 		return counts
-	}, [records])
+	}, [records, recordCount])
 
 	const totalRecords = filteredRecords.length
 	const pagination = usePagination(totalRecords)
@@ -157,19 +147,24 @@ export function EvtxViewer({
 		[filteredRecords, pagination.start, pagination.end]
 	)
 
+	// Render timing — fires after React commits to DOM
+	useEffect(() => {
+		console.log(`[render] EvtxViewer committed — ${recordCount} records, isDone=${isDone}`)
+	})
+
 	return (
 		<Stack align='center' gap='md'>
-			{!isParsedMode && (
-				<ProgressBar progress={getProgress(state.status)} />
+			{!isParsedMode && state.status !== 'idle' && (
+				<ProgressBar progress={progress} />
 			)}
-			{!isParsedMode && (
+			{!isParsedMode && statusMessage && (
 				<StatusMessage
-					message={getStatusMessage(state)}
-					type={getStatusType(state)}
+					message={statusMessage}
+					type={statusType}
 				/>
 			)}
 
-			{isDone && result && (
+			{hasRecords && (
 				<>
 					<EventSummary records={records} />
 
@@ -204,18 +199,20 @@ export function EvtxViewer({
 						</Group>
 					</Group>
 
-					<Group gap='sm' style={{width: '100%'}}>
-						<WarningsPanel warnings={result.warnings} />
-						<CopyButton disabled={false} getText={buildXml} />
-						<DownloadButton
-							disabled={false}
-							fileName={effectiveFileName}
-							getText={buildXml}
-						/>
-						<Text c='dimmed' ml='auto' size='sm'>
-							{filteredRecords.length} of {records.length} events
-						</Text>
-					</Group>
+					{isDone && result && (
+						<Group gap='sm' style={{width: '100%'}}>
+							<WarningsPanel warnings={result.warnings} />
+							<CopyButton disabled={false} getText={buildXml} />
+							<DownloadButton
+								disabled={false}
+								fileName={effectiveFileName}
+								getText={buildXml}
+							/>
+							<Text c='dimmed' ml='auto' size='sm'>
+								{filteredRecords.length} of {records.length} events
+							</Text>
+						</Group>
+					)}
 
 					<Divider style={{width: '100%'}} />
 
@@ -233,13 +230,15 @@ export function EvtxViewer({
 					)}
 
 					<Group justify='space-between' style={{width: '100%'}}>
-						<StatsDisplay
-							fileSize={effectiveFileSize}
-							numChunks={result.numChunks}
-							parseTime={effectiveParseTime}
-							totalRecords={result.totalRecords}
-							tplStats={result.tplStats}
-						/>
+						{isDone && result && (
+							<StatsDisplay
+								fileSize={effectiveFileSize}
+								numChunks={result.numChunks}
+								parseTime={effectiveParseTime}
+								totalRecords={result.totalRecords}
+								tplStats={result.tplStats}
+							/>
+						)}
 						{viewMode === 'viewer' && pagination.showPagination && (
 							<PaginationBar
 								currentPage={pagination.currentPage}

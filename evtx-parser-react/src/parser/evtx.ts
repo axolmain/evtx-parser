@@ -313,7 +313,10 @@ export function parseEventRecord(
 	}
 }
 
-export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
+export function parseEvtx(
+	buffer: ArrayBuffer,
+	onBatch?: (records: ParsedEventRecord[], progress: number) => void
+): EvtxParseResult {
 	const dv = new DataView(buffer)
 	const fileHeader: FileHeader = parseFileHeader(buffer, dv)
 	const chunkOffsets: number[] = discoverChunkOffsets(dv, fileHeader.headerBlockSize)
@@ -334,6 +337,7 @@ export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
 	let totalRecords = 0
 	const allChunkWarnings: string[] = []
 	const parsedRecords: ParsedEventRecord[] = []
+	let batch: ParsedEventRecord[] = []
 
 	// parse the chunks
 	for (let ci = 0; ci < chunkOffsets.length; ci++) {
@@ -361,9 +365,19 @@ export function parseEvtx(buffer: ArrayBuffer): EvtxParseResult {
 				r, chunkDv, chunk.header, tplStats, ci, parser
 			)
 			parsedRecords.push(record)
+			if (onBatch) batch.push(record)
 		}
 
 		totalRecords += chunk.records.length
+
+		if (onBatch && batch.length >= 500) {
+			onBatch(batch, (ci + 1) / chunkOffsets.length)
+			batch = []
+		}
+	}
+
+	if (onBatch && batch.length > 0) {
+		onBatch(batch, 1)
 	}
 
 	return {
