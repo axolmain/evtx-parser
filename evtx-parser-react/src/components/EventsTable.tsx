@@ -245,12 +245,12 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 			striped: 'odd',
 			highlightOnHover: true,
 			withTableBorder: true,
+			style: {minWidth: 'max-content'},
 		},
 		mantineTableHeadCellProps: {
 			style: {fontSize: '0.8rem'},
 			className: 'compact-table-header'
 		},
-		layoutMode: 'grid',
 		mantineTableContainerProps: {style: {maxHeight: '600px', overflowX: 'auto'}},
 		renderDetailPanel: ({row}) => (
 			<Code block={true} fz='xs' mah={400} style={{overflow: 'auto'}}>
