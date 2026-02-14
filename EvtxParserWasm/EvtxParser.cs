@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace EvtxParserWasm;
 
 /// <summary>
@@ -20,40 +22,47 @@ public class EvtxParser
 
     /// <summary>
     /// Parses an entire EVTX file from a byte array.
+    /// maxThreads: 0 or -1 = all cores, 1 = single-threaded, N = use N threads.
     /// </summary>
-    public static EvtxParser Parse(byte[] data)
+    public static EvtxParser Parse(byte[] data, int maxThreads = 0)
     {
         EvtxFileHeader fileHeader = EvtxFileHeader.ParseEvtxFileHeader(data);
         int chunkStart = fileHeader.HeaderBlockSize;
 
-        // Compute chunk count from file size — handles files >4GB where ushort maxes at 65535
+        // Compute chunk count from file size
         int chunkCount = (data.Length - chunkStart) / EvtxChunk.ChunkSize;
 
-        List<EvtxChunk> chunks = new List<EvtxChunk>(chunkCount);
-        int totalRecords = 0;
-
-        // Compiled template cache persists across chunks
-        Dictionary<Guid, CompiledTemplate?> compiledCache = new();
-
-        // Single span over the whole file — no per-chunk allocations
+        // Phase 1 (sequential): scan chunks, validate magic, collect valid offsets
         ReadOnlySpan<byte> span = data;
+        int[] validOffsets = new int[chunkCount];
+        int validCount = 0;
 
         for (int i = 0; i < chunkCount; i++)
         {
             int offset = chunkStart + i * EvtxChunk.ChunkSize;
-
-            // Guard against truncated files
             if (offset + EvtxChunk.ChunkSize > data.Length)
                 break;
-
-            // Skip chunks with bad magic (e.g. zeroed-out or corrupted)
             if (!span.Slice(offset, 8).SequenceEqual("ElfChnk\0"u8))
                 continue;
+            validOffsets[validCount++] = offset;
+        }
 
-            // Slice the span — no 64KB byte[] allocation per chunk
-            EvtxChunk chunk = EvtxChunk.Parse(span.Slice(offset, EvtxChunk.ChunkSize), offset, data, compiledCache);
-            chunks.Add(chunk);
-            totalRecords += chunk.Records.Count;
+        // Phase 2 (parallel): parse all valid chunks
+        ConcurrentDictionary<Guid, CompiledTemplate?> compiledCache = new();
+        EvtxChunk[] results = new EvtxChunk[validCount];
+
+        int parallelism = maxThreads > 0 ? maxThreads : -1;
+        Parallel.For(0, validCount,
+            new ParallelOptions { MaxDegreeOfParallelism = parallelism },
+            i => { results[i] = EvtxChunk.Parse(data, validOffsets[i], compiledCache); });
+
+        // Phase 3 (sequential): collect results
+        List<EvtxChunk> chunks = new List<EvtxChunk>(validCount);
+        int totalRecords = 0;
+        for (int i = 0; i < validCount; i++)
+        {
+            chunks.Add(results[i]);
+            totalRecords += results[i].Records.Count;
         }
 
         return new EvtxParser(data, fileHeader, chunks, totalRecords);

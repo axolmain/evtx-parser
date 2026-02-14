@@ -93,6 +93,40 @@ public class BinXmlParserTests(ITestOutputHelper testOutputHelper)
     }
 
     [Fact]
+    public void MultithreadedParsingProducesIdenticalOutput()
+    {
+        byte[] data = File.ReadAllBytes(Path.Combine(TestDataDir, "security.evtx"));
+
+        // Parse with 1 thread as baseline
+        EvtxParser baseline = EvtxParser.Parse(data, 1);
+        string[] baselineXml = FlattenXml(baseline);
+
+        foreach (int threadCount in new[] { 2, 4, 8 })
+        {
+            EvtxParser result = EvtxParser.Parse(data, threadCount);
+            string[] resultXml = FlattenXml(result);
+
+            Assert.Equal(baselineXml.Length, resultXml.Length);
+            for (int i = 0; i < baselineXml.Length; i++)
+            {
+                Assert.True(baselineXml[i] == resultXml[i],
+                    $"Record {i} differs with {threadCount} threads. " +
+                    $"Expected length {baselineXml[i].Length}, got {resultXml[i].Length}");
+            }
+
+            testOutputHelper.WriteLine($"  {threadCount} threads: {resultXml.Length} records match baseline");
+        }
+    }
+
+    private static string[] FlattenXml(EvtxParser parser)
+    {
+        List<string> all = new();
+        foreach (EvtxChunk chunk in parser.Chunks)
+            all.AddRange(chunk.ParsedXml);
+        return all.ToArray();
+    }
+
+    [Fact]
     public void SampleXmlOutputForInspection()
     {
         byte[] data = File.ReadAllBytes(Path.Combine(TestDataDir, "security.evtx"));

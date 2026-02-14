@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 
 namespace EvtxParserWasm;
@@ -39,7 +40,7 @@ public class EvtxChunk
     /// Parses a 64KB chunk: header, preloads templates, walks event records, and parses BinXml.
     /// </summary>
     internal static EvtxChunk Parse(ReadOnlySpan<byte> chunkData, int chunkFileOffset,
-        byte[] fileData, Dictionary<Guid, CompiledTemplate?> compiledCache)
+        byte[] fileData, ConcurrentDictionary<Guid, CompiledTemplate?> compiledCache)
     {
         EvtxChunkHeader header = EvtxChunkHeader.ParseEvtxChunkHeader(chunkData);
 
@@ -107,5 +108,16 @@ public class EvtxChunk
         }
 
         return new EvtxChunk(header, templates, records, Array.Empty<string>());
+    }
+
+    /// <summary>
+    /// Parses a 64KB chunk from a byte[] — safe for use from Parallel.For lambdas
+    /// (ReadOnlySpan is a ref struct and cannot cross thread boundaries).
+    /// </summary>
+    internal static EvtxChunk Parse(byte[] fileData, int chunkFileOffset,
+        ConcurrentDictionary<Guid, CompiledTemplate?> compiledCache)
+    {
+        ReadOnlySpan<byte> chunkData = fileData.AsSpan(chunkFileOffset, ChunkSize);
+        return Parse(chunkData, chunkFileOffset, fileData, compiledCache);
     }
 }

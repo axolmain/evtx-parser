@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -31,7 +32,7 @@ internal sealed class BinXmlParser
     private readonly byte[] _fileData;
     private readonly int _chunkFileOffset;
     private readonly Dictionary<uint, BinXmlTemplateDefinition> _templates;
-    private readonly Dictionary<Guid, CompiledTemplate?> _compiledCache;
+    private readonly ConcurrentDictionary<Guid, CompiledTemplate?> _compiledCache;
     private readonly Dictionary<uint, string> _nameCache;
 
     private static string[] InitHexLookup()
@@ -46,7 +47,7 @@ internal sealed class BinXmlParser
         byte[] fileData,
         int chunkFileOffset,
         Dictionary<uint, BinXmlTemplateDefinition> templates,
-        Dictionary<Guid, CompiledTemplate?> compiledCache)
+        ConcurrentDictionary<Guid, CompiledTemplate?> compiledCache)
     {
         _fileData = fileData;
         _chunkFileOffset = chunkFileOffset;
@@ -234,12 +235,9 @@ internal sealed class BinXmlParser
         int tplBodyFileOffset = _chunkFileOffset + (int)defDataOffset + 24;
         if (tplBodyFileOffset + (int)dataSize > _fileData.Length) return;
 
-        // Check compiled cache
-        if (!_compiledCache.TryGetValue(templateGuid, out CompiledTemplate? compiled))
-        {
-            compiled = CompileTemplate((int)defDataOffset, (int)dataSize);
-            _compiledCache[templateGuid] = compiled;
-        }
+        // Check compiled cache (GetOrAdd may invoke factory concurrently for same key — harmless)
+        CompiledTemplate? compiled = _compiledCache.GetOrAdd(templateGuid,
+            _ => CompileTemplate((int)defDataOffset, (int)dataSize));
 
         if (compiled != null)
         {
