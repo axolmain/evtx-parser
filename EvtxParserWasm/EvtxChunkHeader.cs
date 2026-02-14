@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Runtime.InteropServices;
 
 namespace EvtxParserWasm;
 
@@ -8,7 +9,6 @@ namespace EvtxParserWasm;
 /// records checksum covers all event record data in the chunk. The common string offset table allows the Binary XML
 /// parser to resolve frequently-used element/attribute names without re-reading each record.
 /// </summary>
-/// <param name="Signature">Offset 0, 8 bytes — Magic bytes identifying a valid chunk ("ElfChnk\0").</param>
 /// <param name="FirstEventRecordNumber">Offset 8, 8 bytes — Log record number of first event in this chunk.</param>
 /// <param name="LastEventRecordNumber">Offset 16, 8 bytes — Log record number of last event in this chunk.</param>
 /// <param name="FirstEventRecordId">Offset 24, 8 bytes — Record identifier of first event.</param>
@@ -21,9 +21,18 @@ namespace EvtxParserWasm;
 /// <param name="Checksum">Offset 124, 4 bytes — CRC32 of first 120 bytes and bytes 128–512 of the chunk.</param>
 /// <param name="CommonStringOffsets">Offset 128, 256 bytes — Offset table for 64 cached string names within this chunk.</param>
 /// <param name="TemplatePtrs">Offset 384, 128 bytes — Offset table for 32 cached template definitions within this chunk.</param>
-public record EvtxChunkHeader(byte[] Signature, ulong FirstEventRecordNumber, ulong LastEventRecordNumber,
-    ulong FirstEventRecordId, ulong LastEventRecordId, uint HeaderSize, uint LastEventRecordDataOffset,
-    uint FreeSpaceOffset, uint EventRecordsChecksum, ChunkFlags Flags, uint Checksum, uint[] CommonStringOffsets, 
+public record EvtxChunkHeader(
+    ulong FirstEventRecordNumber,
+    ulong LastEventRecordNumber,
+    ulong FirstEventRecordId,
+    ulong LastEventRecordId,
+    uint HeaderSize,
+    uint LastEventRecordDataOffset,
+    uint FreeSpaceOffset,
+    uint EventRecordsChecksum,
+    ChunkFlags Flags,
+    uint Checksum,
+    uint[] CommonStringOffsets,
     uint[] TemplatePtrs)
 {
     public static EvtxChunkHeader ParseEvtxChunkHeader(byte[] data) => ParseBytes(data);
@@ -35,17 +44,11 @@ public record EvtxChunkHeader(byte[] Signature, ulong FirstEventRecordNumber, ul
 
         if (!data[..8].SequenceEqual("ElfChnk\0"u8))
             throw new InvalidDataException("Invalid Chunk signature");
-        
-        uint[] commonStringOffsets = new uint[64];
-        for (int i = 0; i < 64; i++)
-            commonStringOffsets[i] = BinaryPrimitives.ReadUInt32LittleEndian(data[(128 + i * 4)..]);
 
-        uint[] templatePtrs = new uint[32];
-        for (int i = 0; i < 32; i++)
-            templatePtrs[i] = BinaryPrimitives.ReadUInt32LittleEndian(data[(384 + i * 4)..]);
+        uint[] commonStringOffsets = MemoryMarshal.Cast<byte, uint>(data.Slice(128, 256)).ToArray();
+        uint[] templatePtrs = MemoryMarshal.Cast<byte, uint>(data.Slice(384, 128)).ToArray();
 
         return new EvtxChunkHeader(
-            Signature: data[..8].ToArray(),
             FirstEventRecordNumber: BinaryPrimitives.ReadUInt64LittleEndian(data[8..]),
             LastEventRecordNumber: BinaryPrimitives.ReadUInt64LittleEndian(data[16..]),
             FirstEventRecordId: BinaryPrimitives.ReadUInt64LittleEndian(data[24..]),

@@ -16,7 +16,6 @@ public class EvtxFileHeaderTests(ITestOutputHelper testOutputHelper)
         var header = EvtxFileHeader.ParseEvtxFileHeader(data);
         sw.Stop();
 
-        Assert.Equal("ElfFile\0"u8.ToArray(), header.Signature);
         Assert.Equal(128u, header.HeaderSize);
         Assert.Equal(3, header.MajorFormatVersion);
         Assert.Equal(1, header.MinorFormatVersion);
@@ -25,7 +24,8 @@ public class EvtxFileHeaderTests(ITestOutputHelper testOutputHelper)
         Assert.True(header.Checksum != 0);
 
         testOutputHelper.WriteLine($"[security.evtx] Parsed header in {sw.Elapsed.TotalMicroseconds:F1}µs");
-        testOutputHelper.WriteLine($"  Chunks: {header.NumberOfChunks}, Flags: {header.FileFlags}, NextRecord: {header.NextRecordIdentifier}");
+        testOutputHelper.WriteLine(
+            $"  Chunks: {header.NumberOfChunks}, Flags: {header.FileFlags}, NextRecord: {header.NextRecordIdentifier}");
     }
 
     [Fact]
@@ -77,7 +77,6 @@ public class EvtxFileHeaderTests(ITestOutputHelper testOutputHelper)
 
         var header = EvtxFileHeader.ParseEvtxFileHeader(data);
 
-        Assert.Equal("ElfFile\0"u8.ToArray(), header.Signature);
         Assert.Equal(0u, header.HeaderSize);
         Assert.Equal((ushort)0, header.NumberOfChunks);
         Assert.Equal(HeaderFlags.None, header.FileFlags);
@@ -101,7 +100,8 @@ public class EvtxFileHeaderTests(ITestOutputHelper testOutputHelper)
             sw.Stop();
 
             var name = Path.GetFileName(file);
-            testOutputHelper.WriteLine($"  [{name}] {sw.Elapsed.TotalMicroseconds,8:F1}µs | v{header.MajorFormatVersion}.{header.MinorFormatVersion} | {header.NumberOfChunks} chunks | {header.FileFlags}");
+            testOutputHelper.WriteLine(
+                $"  [{name}] {sw.Elapsed.TotalMicroseconds,8:F1}µs | v{header.MajorFormatVersion}.{header.MinorFormatVersion} | {header.NumberOfChunks} chunks | {header.FileFlags}");
         }
     }
 }

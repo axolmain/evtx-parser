@@ -5,9 +5,9 @@ namespace EvtxParserWasm;
 [Flags]
 public enum HeaderFlags : uint
 {
-    None    = 0x0,
-    Dirty   = 0x1,
-    Full    = 0x2,
+    None = 0x0,
+    Dirty = 0x1,
+    Full = 0x2,
     NoCrc32 = 0x4,
 }
 
@@ -17,7 +17,6 @@ public enum HeaderFlags : uint
 /// integrity validation. The Dirty flag indicates unclean shutdown; the Full flag indicates the log
 /// reached its maximum size.
 /// </summary>
-/// <param name="Signature">Offset 0, 8 bytes. Magic bytes "ElfFile\x00".</param>
 /// <param name="FirstChunkNumber">Offset 8, 8 bytes. Number of the oldest chunk in the file.</param>
 /// <param name="LastChunkNumber">Offset 16, 8 bytes. Number of the most recent chunk in the file.</param>
 /// <param name="NextRecordIdentifier">Offset 24, 8 bytes. Next event record identifier to be assigned.</param>
@@ -28,11 +27,18 @@ public enum HeaderFlags : uint
 /// <param name="NumberOfChunks">Offset 42, 2 bytes. Number of chunks in the file.</param>
 /// <param name="FileFlags">Offset 120, 4 bytes. Dirty/Full/NoCrc32 flags.</param>
 /// <param name="Checksum">Offset 124, 4 bytes. CRC32 of the first 120 bytes of the header.</param>
-public record EvtxFileHeader(byte[] Signature, ulong FirstChunkNumber, ulong LastChunkNumber, 
-    ulong NextRecordIdentifier, uint HeaderSize, ushort MinorFormatVersion, ushort MajorFormatVersion, 
-    ushort HeaderBlockSize, ushort NumberOfChunks, HeaderFlags FileFlags, uint Checksum )
+public record EvtxFileHeader(
+    ulong FirstChunkNumber,
+    ulong LastChunkNumber,
+    ulong NextRecordIdentifier,
+    uint HeaderSize,
+    ushort MinorFormatVersion,
+    ushort MajorFormatVersion,
+    ushort HeaderBlockSize,
+    ushort NumberOfChunks,
+    HeaderFlags FileFlags,
+    uint Checksum)
 {
-
     public static EvtxFileHeader ParseEvtxFileHeader(byte[] data) => ParseBytes(data);
 
     private static EvtxFileHeader ParseBytes(ReadOnlySpan<byte> data)
@@ -44,7 +50,6 @@ public record EvtxFileHeader(byte[] Signature, ulong FirstChunkNumber, ulong Las
             throw new InvalidDataException("Invalid EVTX signature");
 
         return new EvtxFileHeader(
-            Signature: data[..8].ToArray(),
             FirstChunkNumber: BinaryPrimitives.ReadUInt64LittleEndian(data[8..]),
             LastChunkNumber: BinaryPrimitives.ReadUInt64LittleEndian(data[16..]),
             NextRecordIdentifier: BinaryPrimitives.ReadUInt64LittleEndian(data[24..]),
@@ -55,6 +60,6 @@ public record EvtxFileHeader(byte[] Signature, ulong FirstChunkNumber, ulong Las
             NumberOfChunks: BinaryPrimitives.ReadUInt16LittleEndian(data[42..]),
             FileFlags: (HeaderFlags)BinaryPrimitives.ReadUInt32LittleEndian(data[120..]),
             Checksum: BinaryPrimitives.ReadUInt32LittleEndian(data[124..])
-            );
+        );
     }
 }

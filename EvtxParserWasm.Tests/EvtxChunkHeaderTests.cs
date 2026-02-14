@@ -20,7 +20,6 @@ public class EvtxChunkHeaderTests(ITestOutputHelper testOutputHelper)
         var chunk = EvtxChunkHeader.ParseEvtxChunkHeader(chunkData);
         sw.Stop();
 
-        Assert.Equal("ElfChnk\0"u8.ToArray(), chunk.Signature);
         Assert.Equal(128u, chunk.HeaderSize);
         Assert.True(chunk.LastEventRecordNumber >= chunk.FirstEventRecordNumber);
         Assert.True(chunk.LastEventRecordId >= chunk.FirstEventRecordId);
