@@ -1,5 +1,4 @@
 import {
-	Badge,
 	Box,
 	Button,
 	Divider,
@@ -9,22 +8,14 @@ import {
 	Stack,
 	Tabs,
 	Text,
-	Title,
-	Tooltip,
+	Title
 } from '@mantine/core'
-import {spotlight} from '@mantine/spotlight'
-import {
-	IconAlertCircle,
-	IconFileText,
-	IconFileTypography,
-	IconJson,
-	IconQuestionMark,
-	IconRefresh,
-	IconSearch,
-} from '@tabler/icons-react'
+import {IconAlertCircle} from '@tabler/icons-react'
 import {createFileRoute, useRouter, useSearch} from '@tanstack/react-router'
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
+import {ArchiveToolbar} from '@/components/ArchiveToolbar'
 import {EvtxViewer} from '@/components/EvtxViewer'
+import {FileGroup} from '@/components/FileGroup'
 import {JsonViewer} from '@/components/JsonViewer'
 import {TextViewer} from '@/components/TextViewer'
 import type {EvtxCacheData} from '@/contexts/CacheContext'
@@ -56,65 +47,18 @@ export const Route = createFileRoute('/archive/$archiveId')({
 	component: ArchiveLayout,
 	validateSearch: (search: Record<string, unknown>): ArchiveSearchParams => {
 		const params: ArchiveSearchParams = {}
-		if (search['file'] !== undefined) params.file = String(search['file'])
-		if (search['view'] !== undefined) params.view = String(search['view'])
-		if (search['search'] !== undefined) params.search = String(search['search'])
-		if (search['levels'] !== undefined) params.levels = String(search['levels'])
-		if (search['event'] !== undefined) params.event = Number(search['event'])
-		if (search['page'] !== undefined) params.page = Number(search['page'])
-		if (search['pageSize'] !== undefined)
-			params.pageSize = Number(search['pageSize'])
-		if (search['fieldsToExtract'] !== undefined)
-			params.fieldsToExtract = String(search['fieldsToExtract'])
+		if (search.file !== undefined) params.file = String(search.file)
+		if (search.view !== undefined) params.view = String(search.view)
+		if (search.search !== undefined) params.search = String(search.search)
+		if (search.levels !== undefined) params.levels = String(search.levels)
+		if (search.event !== undefined) params.event = Number(search.event)
+		if (search.page !== undefined) params.page = Number(search.page)
+		if (search.pageSize !== undefined) params.pageSize = Number(search.pageSize)
+		if (search.fieldsToExtract !== undefined)
+			params.fieldsToExtract = String(search.fieldsToExtract)
 		return params
-	},
+	}
 })
-
-/* ─── helpers ─── */
-
-function formatFileSize(bytes: number): string {
-	if (bytes < 1024) return `${bytes} B`
-	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-const FILE_META: Record<string, {icon: typeof IconFileText; color: string; label: string}> = {
-	evtx: {icon: IconFileText, color: 'var(--mantine-color-blue-6)', label: 'EVTX'},
-	json: {icon: IconJson, color: 'var(--mantine-color-green-6)', label: 'JSON'},
-	xml: {icon: IconFileText, color: 'var(--mantine-color-orange-6)', label: 'XML'},
-	txt: {icon: IconFileTypography, color: 'var(--mantine-color-gray-6)', label: 'Text'},
-}
-
-function FileGroup({files, type}: {files: ArchiveFileEntry[]; type: string}) {
-	if (files.length === 0) return null
-	const meta = FILE_META[type]
-	const Icon = meta?.icon ?? IconQuestionMark
-	const color = meta?.color ?? 'var(--mantine-color-gray-6)'
-	const label = meta?.label ?? 'Other'
-
-	return (
-		<>
-			<Group gap='xs' px='sm' py={4}>
-				<Text c='dimmed' fw={600} size='xs' tt='uppercase'>{label}</Text>
-				<Badge size='xs' variant='light'>{files.length}</Badge>
-			</Group>
-			{files.map(entry => (
-				<Tabs.Tab
-					key={entry.name}
-					leftSection={<Icon color={color} size={16} />}
-					value={entry.name}
-				>
-					<Stack gap={0}>
-						<Tooltip disabled={entry.name.length < 25} label={entry.name}>
-							<Text size='sm' style={{maxWidth: 180}} truncate>{entry.name}</Text>
-						</Tooltip>
-						<Text c='dimmed' size='xs'>{formatFileSize(entry.size)}</Text>
-					</Stack>
-				</Tabs.Tab>
-			))}
-		</>
-	)
-}
 
 /* ─── skeletons ─── */
 
@@ -167,7 +111,7 @@ function FileViewer({
 	archiveId,
 	fileName,
 	isActive,
-	selectedRecordId,
+	selectedRecordId
 }: {
 	archiveId: string
 	fileName: string
@@ -180,10 +124,9 @@ function FileViewer({
 	const prevActive = useRef(isActive)
 	useEffect(() => {
 		if (isActive && !prevActive.current) {
-			console.log(`[nav] switched to ${fileName} (keep-alive, no re-render)`)
 		}
 		prevActive.current = isActive
-	}, [isActive, fileName])
+	}, [isActive])
 
 	if (isLoading && !data) {
 		return fileType === 'evtx' ? <EvtxSkeleton /> : <TextSkeleton />
@@ -224,10 +167,12 @@ function FileViewer({
 			return (
 				<Stack align='center' gap='md' p='4rem'>
 					<IconAlertCircle color='var(--mantine-color-gray-6)' size={64} />
-					<Text fw={600} size='lg'>Unsupported File Type</Text>
+					<Text fw={600} size='lg'>
+						Unsupported File Type
+					</Text>
 					<Text c='dimmed' maw={500} ta='center'>
-						Cannot display <strong>{fileName}</strong>. Only EVTX, JSON, XML, and
-						TXT files are supported.
+						Cannot display <strong>{fileName}</strong>. Only EVTX, JSON, XML,
+						and TXT files are supported.
 					</Text>
 				</Stack>
 			)
@@ -284,25 +229,39 @@ function ArchiveLayout() {
 		loadArchive()
 	}, [archiveId])
 
-	const handleTabChange = useCallback((value: string | null) => {
-		if (!value) return
-		router.navigate({
-			to: '/archive/$archiveId',
-			params: {archiveId},
-			search: {file: value},
-		})
-	}, [archiveId, router])
+	const handleTabChange = useCallback(
+		(value: string | null) => {
+			if (!value) return
+			router.navigate({
+				to: '/archive/$archiveId',
+				params: {archiveId},
+				search: {file: value}
+			})
+		},
+		[archiveId, router]
+	)
 
 	const groups = useMemo(() => {
-		const g: Record<string, ArchiveFileEntry[]> = {evtx: [], json: [], xml: [], txt: [], other: []}
+		const g: Record<string, ArchiveFileEntry[]> = {
+			evtx: [],
+			json: [],
+			xml: [],
+			txt: [],
+			other: []
+		}
 		for (const e of entries) {
-			(g[e.type] ?? g.other).push(e)
+			const array = g[e.type] ?? g.other
+			if (array) {
+				array.push(e)
+			}
 		}
 		return g
 	}, [entries])
 
 	const counts = useMemo(() => {
-		let evtx = 0, json = 0, txt = 0
+		let evtx = 0
+		let json = 0
+		let txt = 0
 		for (const e of entries) {
 			if (e.type === 'evtx') evtx++
 			else if (e.type === 'json') json++
@@ -341,79 +300,39 @@ function ArchiveLayout() {
 	}
 
 	return (
-		<Stack gap='lg' style={{height: 'calc(100vh - 60px - 2 * var(--mantine-spacing-md))'}}>
-			<Group justify='space-between' wrap='wrap'>
-				<Group gap='md'>
-					<Title order={3}>SysInfoZip Viewer</Title>
-					<Badge color='blue' size='lg' variant='light'>
-						{archive.name}
-					</Badge>
-				</Group>
-
-				<Group gap='sm'>
-					<Text c='dimmed' size='sm'>
-						{entries.length} files
-						{counts.evtx > 0 && ` \u2022 ${counts.evtx} EVTX`}
-						{counts.json > 0 && ` \u2022 ${counts.json} JSON`}
-						{counts.txt > 0 && ` \u2022 ${counts.txt} TXT`}
-					</Text>
-				</Group>
-			</Group>
-
-			<Group gap='sm'>
-				<Button
-					leftSection={<IconSearch size={18} />}
-					onClick={() => spotlight.open()}
-					variant='default'
-				>
-					Search Events
-				</Button>
-
-				{stats.evtx > 0 && (
-					<>
-						<Badge color='green' size='lg'>
-							{stats.evtx} EVTX cached
-						</Badge>
-						<Button
-							color='red'
-							onClick={clearCaches}
-							size='sm'
-							variant='light'
-						>
-							Clear Cache
-						</Button>
-					</>
-				)}
-
-				<Button
-					leftSection={<IconRefresh size={18} />}
-					ml='auto'
-					onClick={() => router.navigate({to: '/'})}
-					variant='light'
-				>
-					Load Another File
-				</Button>
-			</Group>
-
-			<Divider />
+		<Stack
+			gap={0}
+			style={{height: 'calc(100vh - 60px - 2 * var(--mantine-spacing-md))'}}
+		>
+			<ArchiveToolbar
+				archiveName={archive.name}
+				cachedEvtxCount={stats.evtx}
+				fileCounts={{total: entries.length, ...counts}}
+				onClearCache={clearCaches}
+				onGoHome={() => router.navigate({to: '/'})}
+			/>
 
 			<Tabs
-				keepMounted
+				keepMounted={true}
 				onChange={handleTabChange}
 				orientation='vertical'
-				value={currentFileName}
 				styles={{
 					root: {flex: 1, minHeight: 0},
 					list: {width: 280, overflowY: 'auto'},
-					panel: {flex: 1, overflowY: 'auto', paddingLeft: 'var(--mantine-spacing-md)'},
+					panel: {
+						flex: 1,
+						overflowY: 'auto',
+						paddingLeft: 'var(--mantine-spacing-md)'
+					}
 				}}
+				value={currentFileName}
 			>
 				<Tabs.List>
-					<FileGroup files={groups.evtx} type='evtx' />
-					<FileGroup files={groups.json} type='json' />
-					<FileGroup files={groups.xml} type='xml' />
-					<FileGroup files={groups.txt} type='txt' />
-					<FileGroup files={groups.other} type='other' />
+					<FileGroup files={groups.evtx!} type='evtx' />
+					<FileGroup files={groups.json!} type='json' />
+					<FileGroup files={groups.xml!} type='xml' />
+					<FileGroup files={groups.txt!} type='txt' />
+					<FileGroup files={groups.other!} type='other' />
 				</Tabs.List>
 
 				{openedFiles.map(file => (
@@ -422,13 +341,23 @@ function ArchiveLayout() {
 							archiveId={archiveId}
 							fileName={file}
 							isActive={file === currentFileName}
-							selectedRecordId={file === currentFileName ? (searchParams.event ?? null) : null}
+							selectedRecordId={
+								file === currentFileName ? (searchParams.event ?? null) : null
+							}
 						/>
 					</Tabs.Panel>
 				))}
 
 				{!currentFileName && (
-					<Box p='4rem' style={{flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+					<Box
+						p='4rem'
+						style={{
+							flex: 1,
+							display: 'flex',
+							alignItems: 'center',
+							justifyContent: 'center'
+						}}
+					>
 						<Text c='dimmed' size='lg'>
 							Select a file to view its contents
 						</Text>

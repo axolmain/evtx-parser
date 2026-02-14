@@ -1,4 +1,4 @@
-import {Outlet, createRootRoute} from '@tanstack/react-router'
+import {createRootRoute, Outlet} from '@tanstack/react-router'
 import {AppShellWrapper} from '@/components/AppShellWrapper'
 import {GlobalSearch} from '@/components/GlobalSearch'
 import {PWAPrompt} from '@/components/PWAPrompt'
@@ -11,8 +11,8 @@ function RootLayout() {
 		<>
 			<GlobalSearch />
 			<AppShellWrapper
-				showNavbar={!!navbarContent}
 				navbarContent={navbarContent}
+				showNavbar={Boolean(navbarContent)}
 			>
 				<Outlet />
 			</AppShellWrapper>
@@ -22,5 +22,5 @@ function RootLayout() {
 }
 
 export const Route = createRootRoute({
-	component: RootLayout,
+	component: RootLayout
 })

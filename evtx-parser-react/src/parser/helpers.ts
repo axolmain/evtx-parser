@@ -6,23 +6,29 @@ const utf16 = new TextDecoder('utf-16le')
 
 // Pad helpers for manual ISO date formatting
 function pad2(n: number): string {
-	return n < 10 ? '0' + n : '' + n
+	return n < 10 ? `0${n}` : String(n)
 }
 
 function pad4(n: number): string {
-	if (n < 10) return '000' + n
-	if (n < 100) return '00' + n
-	if (n < 1000) return '0' + n
-	return '' + n
+	if (n < 10) return `000${n}`
+	if (n < 100) return `00${n}`
+	if (n < 1000) return `0${n}`
+	return String(n)
 }
 
 // civil_from_days: convert days since Unix epoch to {year, month, day}
 // Based on Howard Hinnant's date algorithms
 function civilFromDays(z: number): [number, number, number] {
-	z += 719468
-	const era = Math.floor((z >= 0 ? z : z - 146096) / 146097)
-	const doe = z - era * 146097
-	const yoe = Math.floor((doe - Math.floor(doe / 1460) + Math.floor(doe / 36524) - Math.floor(doe / 146096)) / 365)
+	z += 719_468
+	const era = Math.floor((z >= 0 ? z : z - 146_096) / 146_097)
+	const doe = z - era * 146_097
+	const yoe = Math.floor(
+		(doe -
+			Math.floor(doe / 1460) +
+			Math.floor(doe / 36_524) -
+			Math.floor(doe / 146_096)) /
+			365
+	)
 	const y = yoe + era * 400
 	const doy = doe - (365 * yoe + Math.floor(yoe / 4) - Math.floor(yoe / 100))
 	const mp = Math.floor((5 * doy + 2) / 153)
@@ -47,25 +53,41 @@ export function filetimeToIso(dv: DataView, offset: number): string {
 	if (lo === 0 && hi === 0) return ''
 
 	// Milliseconds since Unix epoch (safe: result < 2^42 for dates through year 2100+)
-	const ms = hi * 429496 + Math.floor((hi * 7296 + lo) / 10000) - 11644473600000
+	const ms =
+		hi * 429_496 + Math.floor((hi * 7296 + lo) / 10_000) - 11_644_473_600_000
 	if (ms !== ms) return '' // NaN check
 
 	// Sub-second 100ns ticks: (hi * 4294967296 + lo) % 10000000
 	// Decomposed to avoid exceeding Number.MAX_SAFE_INTEGER:
 	// (hi % 10000000) * (4294967296 % 10000000) = (hi % 10000000) * 4967296
-	const subSecTicks = (((hi % 10000000) * 4967296) % 10000000 + lo % 10000000) % 10000000
+	const subSecTicks =
+		((((hi % 10_000_000) * 4_967_296) % 10_000_000) + (lo % 10_000_000)) %
+		10_000_000
 
 	// Manual date formatting (avoids new Date() + toISOString() allocation)
-	const totalDays = Math.floor(ms / 86400000)
-	const dayMs = ms - totalDays * 86400000
+	const totalDays = Math.floor(ms / 86_400_000)
+	const dayMs = ms - totalDays * 86_400_000
 	const [yr, mo, dy] = civilFromDays(totalDays)
-	const hours = Math.floor(dayMs / 3600000)
-	const minutes = Math.floor((dayMs % 3600000) / 60000)
-	const seconds = Math.floor((dayMs % 60000) / 1000)
+	const hours = Math.floor(dayMs / 3_600_000)
+	const minutes = Math.floor((dayMs % 3_600_000) / 60_000)
+	const seconds = Math.floor((dayMs % 60_000) / 1000)
 
-	return pad4(yr) + '-' + pad2(mo) + '-' + pad2(dy) + 'T' +
-		pad2(hours) + ':' + pad2(minutes) + ':' + pad2(seconds) + '.' +
-		String(subSecTicks).padStart(7, '0') + 'Z'
+	return (
+		pad4(yr) +
+		'-' +
+		pad2(mo) +
+		'-' +
+		pad2(dy) +
+		'T' +
+		pad2(hours) +
+		':' +
+		pad2(minutes) +
+		':' +
+		pad2(seconds) +
+		'.' +
+		String(subSecTicks).padStart(7, '0') +
+		'Z'
+	)
 }
 
 /**
@@ -74,18 +96,34 @@ export function filetimeToIso(dv: DataView, offset: number): string {
  */
 export function filetimeLoHiToIso(lo: number, hi: number): string {
 	if (lo === 0 && hi === 0) return ''
-	const ms = hi * 429496 + Math.floor((hi * 7296 + lo) / 10000) - 11644473600000
+	const ms =
+		hi * 429_496 + Math.floor((hi * 7296 + lo) / 10_000) - 11_644_473_600_000
 	if (ms !== ms) return '' // NaN check
-	const subSecTicks = (((hi % 10000000) * 4967296) % 10000000 + lo % 10000000) % 10000000
-	const totalDays = Math.floor(ms / 86400000)
-	const dayMs = ms - totalDays * 86400000
+	const subSecTicks =
+		((((hi % 10_000_000) * 4_967_296) % 10_000_000) + (lo % 10_000_000)) %
+		10_000_000
+	const totalDays = Math.floor(ms / 86_400_000)
+	const dayMs = ms - totalDays * 86_400_000
 	const [yr, mo, dy] = civilFromDays(totalDays)
-	const hours = Math.floor(dayMs / 3600000)
-	const minutes = Math.floor((dayMs % 3600000) / 60000)
-	const seconds = Math.floor((dayMs % 60000) / 1000)
-	return pad4(yr) + '-' + pad2(mo) + '-' + pad2(dy) + 'T' +
-		pad2(hours) + ':' + pad2(minutes) + ':' + pad2(seconds) + '.' +
-		String(subSecTicks).padStart(7, '0') + 'Z'
+	const hours = Math.floor(dayMs / 3_600_000)
+	const minutes = Math.floor((dayMs % 3_600_000) / 60_000)
+	const seconds = Math.floor((dayMs % 60_000) / 1000)
+	return (
+		pad4(yr) +
+		'-' +
+		pad2(mo) +
+		'-' +
+		pad2(dy) +
+		'T' +
+		pad2(hours) +
+		':' +
+		pad2(minutes) +
+		':' +
+		pad2(seconds) +
+		'.' +
+		String(subSecTicks).padStart(7, '0') +
+		'Z'
+	)
 }
 
 export function hexDump(uint8arr: Uint8Array): string {
@@ -102,9 +140,14 @@ export function hex32(v: number): string {
 }
 
 export function xmlEscape(str: string): string {
-	if (str.indexOf('&') === -1 && str.indexOf('<') === -1 &&
-		str.indexOf('>') === -1 && str.indexOf('"') === -1 &&
-		str.indexOf("'") === -1) return str
+	if (
+		str.indexOf('&') === -1 &&
+		str.indexOf('<') === -1 &&
+		str.indexOf('>') === -1 &&
+		str.indexOf('"') === -1 &&
+		str.indexOf("'") === -1
+	)
+		return str
 	return str
 		.replaceAll('&', '&amp;')
 		.replaceAll('<', '&lt;')
@@ -151,9 +194,23 @@ export function formatGuid(b: Uint8Array): string {
 	const d1 = ((b[3]! << 24) | (b[2]! << 16) | (b[1]! << 8) | b[0]!) >>> 0
 	const d2 = (b[5]! << 8) | b[4]!
 	const d3 = (b[7]! << 8) | b[6]!
-	return '{' + d1.toString(16).padStart(8, '0') + '-' +
-		d2.toString(16).padStart(4, '0') + '-' +
-		d3.toString(16).padStart(4, '0') + '-' +
-		HEX[b[8]!]! + HEX[b[9]!]! + HEX[b[10]!]! + HEX[b[11]!]! + '-' +
-		HEX[b[12]!]! + HEX[b[13]!]! + HEX[b[14]!]! + HEX[b[15]!]! + '}'
+	return (
+		'{' +
+		d1.toString(16).padStart(8, '0') +
+		'-' +
+		d2.toString(16).padStart(4, '0') +
+		'-' +
+		d3.toString(16).padStart(4, '0') +
+		'-' +
+		HEX[b[8]!]! +
+		HEX[b[9]!]! +
+		HEX[b[10]!]! +
+		HEX[b[11]!]! +
+		'-' +
+		HEX[b[12]!]! +
+		HEX[b[13]!]! +
+		HEX[b[14]!]! +
+		HEX[b[15]!]! +
+		'}'
+	)
 }

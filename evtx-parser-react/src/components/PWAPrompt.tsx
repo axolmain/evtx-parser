@@ -65,7 +65,15 @@ export function PWAPrompt() {
 
 	return (
 		<div
-			style={{position: 'fixed', bottom: '1rem', right: '1rem', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '0.5rem'}}
+			style={{
+				position: 'fixed',
+				bottom: '1rem',
+				right: '1rem',
+				zIndex: 9999,
+				display: 'flex',
+				flexDirection: 'column',
+				gap: '0.5rem'
+			}}
 		>
 			{installable && (
 				<Notification

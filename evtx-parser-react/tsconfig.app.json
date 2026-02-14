@@ -32,5 +32,6 @@
 		"types": ["vitest/globals"],
 		"verbatimModuleSyntax": true
 	},
-	"include": ["src"]
+	"include": ["src"],
+	"exclude": ["src/**/*.bench.ts"]
 }

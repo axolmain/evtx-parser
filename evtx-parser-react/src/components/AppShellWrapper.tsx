@@ -1,5 +1,5 @@
-import {type ReactNode} from 'react'
 import {AppShell, Burger, Group, ScrollArea, Text} from '@mantine/core'
+import type {ReactNode} from 'react'
 import {useNavbar} from '@/contexts/NavbarContext'
 
 interface AppShellWrapperProps {
@@ -11,37 +11,47 @@ interface AppShellWrapperProps {
 export function AppShellWrapper({
 	children,
 	showNavbar = false,
-	navbarContent,
+	navbarContent
 }: AppShellWrapperProps) {
 	const {mobileOpened, toggleMobile, desktopOpened, toggleDesktop} = useNavbar()
 
 	return (
 		<AppShell
 			header={{height: 60}}
+			layout='alt'
 			navbar={{
 				width: 300,
 				breakpoint: 'sm',
-				collapsed: {mobile: !mobileOpened, desktop: !desktopOpened},
+				collapsed: {mobile: !mobileOpened, desktop: !desktopOpened}
 			}}
-			padding="md"
-			layout="alt"
+			padding='md'
 		>
 			<AppShell.Header>
-				<Group h="100%" px="md">
+				<Group h='100%' px='md'>
 					{showNavbar && (
 						<>
-							<Burger opened={mobileOpened} onClick={toggleMobile} hiddenFrom="sm" size="sm" />
-							<Burger opened={desktopOpened} onClick={toggleDesktop} visibleFrom="sm" size="sm" />
+							<Burger
+								hiddenFrom='sm'
+								onClick={toggleMobile}
+								opened={mobileOpened}
+								size='sm'
+							/>
+							<Burger
+								onClick={toggleDesktop}
+								opened={desktopOpened}
+								size='sm'
+								visibleFrom='sm'
+							/>
 						</>
 					)}
-					<Text size="xl" fw={700}>
+					<Text fw={700} size='xl'>
 						EVTX Parser
 					</Text>
 				</Group>
 			</AppShell.Header>
 
 			{showNavbar && (
-				<AppShell.Navbar p="md" withBorder>
+				<AppShell.Navbar p='md' withBorder={true}>
 					<ScrollArea style={{height: '100%'}}>{navbarContent}</ScrollArea>
 				</AppShell.Navbar>
 			)}

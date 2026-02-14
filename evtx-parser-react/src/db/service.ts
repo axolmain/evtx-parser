@@ -66,15 +66,11 @@ export async function deleteArchive(id: string): Promise<void> {
 }
 
 export async function clearAllArchives(): Promise<void> {
-	await db.transaction(
-		'rw',
-		[db.archives, db.files, db.events],
-		async () => {
-			await db.events.clear()
-			await db.files.clear()
-			await db.archives.clear()
-		}
-	)
+	await db.transaction('rw', [db.archives, db.files, db.events], async () => {
+		await db.events.clear()
+		await db.files.clear()
+		await db.archives.clear()
+	})
 }
 
 // ============================================================================

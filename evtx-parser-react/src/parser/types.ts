@@ -61,8 +61,8 @@ export interface TemplateParseError {
 }
 
 export interface CompiledTemplate {
-	parts: string[]       // N+1 literal text segments (like template literal quasis)
-	subIds: number[]      // N substitution indices between the literal parts
+	parts: string[] // N+1 literal text segments (like template literal quasis)
+	subIds: number[] // N substitution indices between the literal parts
 	isOptional: boolean[] // N flags — true = skip if sub is NULL/empty
 }
 

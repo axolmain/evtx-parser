@@ -81,16 +81,22 @@ export class SysInfoZipDB extends Dexie {
 		})
 
 		// Version 3: Strip parsedData from EVTX files — re-parsing from blob is faster
-		this.version(3).stores({
-			archives: 'id, name, uploadedAt',
-			files: 'id, archiveId, type, name',
-			events:
-				'id, archiveId, fileId, eventId, provider, level, computer, timestamp, [archiveId+level], [fileId+eventId]'
-		}).upgrade(async tx => {
-			await tx.table('files').where('type').equals('evtx').modify(file => {
-				delete file.parsedData
+		this.version(3)
+			.stores({
+				archives: 'id, name, uploadedAt',
+				files: 'id, archiveId, type, name',
+				events:
+					'id, archiveId, fileId, eventId, provider, level, computer, timestamp, [archiveId+level], [fileId+eventId]'
 			})
-		})
+			.upgrade(async tx => {
+				await tx
+					.table('files')
+					.where('type')
+					.equals('evtx')
+					.modify(file => {
+						file.parsedData = undefined
+					})
+			})
 	}
 }
 

@@ -68,10 +68,20 @@ function formatRelativeTime(timestamp: string): string {
 	})
 }
 
-type DetailField = {label: string; value: string; mono?: boolean}
-type DetailSection = {divider?: string; fields: DetailField[]}
+interface DetailField {
+	label: string
+	value: string
+	mono?: boolean
+}
+interface DetailSection {
+	divider?: string
+	fields: DetailField[]
+}
 
-function parseEventData(eventData: string): {fields: DetailField[]; message: string} {
+function parseEventData(eventData: string): {
+	fields: DetailField[]
+	message: string
+} {
 	const fields: DetailField[] = []
 	const messageLines: string[] = []
 
@@ -129,14 +139,14 @@ function getDetailSections(e: ParsedEventRecord): DetailSection[] {
 				{label: 'Time Created', value: e.timestamp, mono: true},
 				{label: 'Source', value: e.provider},
 				{label: 'Computer', value: e.computer},
-				{label: 'Channel', value: e.channel},
+				{label: 'Channel', value: e.channel}
 			]
 		},
 		{
 			divider: 'Execution',
 			fields: [
 				{label: 'Process ID', value: e.processId},
-				{label: 'Thread ID', value: e.threadId},
+				{label: 'Thread ID', value: e.threadId}
 			]
 		},
 		{
@@ -146,9 +156,9 @@ function getDetailSections(e: ParsedEventRecord): DetailSection[] {
 				{label: 'Opcode', value: e.opcode},
 				{label: 'Keywords', value: e.keywords, mono: true},
 				{label: 'Version', value: e.version},
-				{label: 'Record ID', value: e.recordId.toString()},
+				{label: 'Record ID', value: e.recordId.toString()}
 			]
-		},
+		}
 	]
 
 	if (e.securityUserId) {
@@ -162,8 +172,18 @@ function getDetailSections(e: ParsedEventRecord): DetailSection[] {
 		sections.push({
 			divider: 'Correlation',
 			fields: [
-				...(e.activityId ? [{label: 'Activity ID', value: e.activityId, mono: true}] : []),
-				...(e.relatedActivityId ? [{label: 'Related Activity ID', value: e.relatedActivityId, mono: true}] : []),
+				...(e.activityId
+					? [{label: 'Activity ID', value: e.activityId, mono: true}]
+					: []),
+				...(e.relatedActivityId
+					? [
+							{
+								label: 'Related Activity ID',
+								value: e.relatedActivityId,
+								mono: true
+							}
+						]
+					: [])
 			]
 		})
 	}
@@ -183,7 +203,8 @@ export function EventViewer({records, selectedRecordId}: Properties) {
 			const event = records.find(r => r.recordId === selectedRecordId)
 			if (event) {
 				setSelectedEvent(event)
-				eventRefs.current.get(selectedRecordId)
+				eventRefs.current
+					.get(selectedRecordId)
 					?.scrollIntoView({behavior: 'smooth', block: 'center'})
 			}
 		}
@@ -193,17 +214,23 @@ export function EventViewer({records, selectedRecordId}: Properties) {
 
 	const copyEventAsJson = () => {
 		if (!selectedEvent) return
-		clipboard.copy(JSON.stringify({
-			recordId: selectedEvent.recordId,
-			timestamp: selectedEvent.timestamp,
-			eventId: selectedEvent.eventId,
-			level: selectedEvent.levelText,
-			provider: selectedEvent.provider,
-			computer: selectedEvent.computer,
-			channel: selectedEvent.channel,
-			eventData: selectedEvent.eventData,
-			xml: selectedEvent.xml
-		}, null, 2))
+		clipboard.copy(
+			JSON.stringify(
+				{
+					recordId: selectedEvent.recordId,
+					timestamp: selectedEvent.timestamp,
+					eventId: selectedEvent.eventId,
+					level: selectedEvent.levelText,
+					provider: selectedEvent.provider,
+					computer: selectedEvent.computer,
+					channel: selectedEvent.channel,
+					eventData: selectedEvent.eventData,
+					xml: selectedEvent.xml
+				},
+				null,
+				2
+			)
+		)
 	}
 
 	return (
@@ -219,20 +246,28 @@ export function EventViewer({records, selectedRecordId}: Properties) {
 		>
 			{/* Event List - Left Panel */}
 			<Paper
-				style={{flex: '0 0 400px', minWidth: 0, display: 'flex', flexDirection: 'column'}}
+				style={{
+					flex: '0 0 400px',
+					minWidth: 0,
+					display: 'flex',
+					flexDirection: 'column'
+				}}
 				withBorder={true}
 			>
-				<Box p='md' style={{borderBottom: '1px solid var(--mantine-color-dark-4)'}}>
+				<Box
+					p='md'
+					style={{borderBottom: '1px solid var(--mantine-color-dark-4)'}}
+				>
 					<Title order={4}>Events ({records.length})</Title>
 				</Box>
 				<ScrollArea style={{flex: 1, overflow: 'auto'}}>
 					<Stack gap={0}>
 						{records.map(record => (
 							<EventListItem
-								key={record.recordId}
-								record={record}
 								isSelected={selectedEvent?.recordId === record.recordId}
+								key={record.recordId}
 								onSelect={setSelectedEvent}
+								record={record}
 								refCallback={el => {
 									if (el) eventRefs.current.set(record.recordId, el)
 									else eventRefs.current.delete(record.recordId)
@@ -245,13 +280,19 @@ export function EventViewer({records, selectedRecordId}: Properties) {
 
 			{/* Event Details - Right Panel */}
 			<Paper
-				style={{flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden'}}
+				style={{
+					flex: 1,
+					minWidth: 0,
+					display: 'flex',
+					flexDirection: 'column',
+					overflow: 'hidden'
+				}}
 				withBorder={true}
 			>
 				{selectedEvent ? (
 					<EventDetail
-						event={selectedEvent}
 						clipboard={clipboard}
+						event={selectedEvent}
 						onCopyJson={copyEventAsJson}
 						onCopyXml={() => clipboard.copy(selectedEvent.xml)}
 					/>
@@ -265,7 +306,12 @@ export function EventViewer({records, selectedRecordId}: Properties) {
 	)
 }
 
-function EventListItem({record, isSelected, onSelect, refCallback}: {
+function EventListItem({
+	record,
+	isSelected,
+	onSelect,
+	refCallback
+}: {
 	record: ParsedEventRecord
 	isSelected: boolean
 	onSelect: (r: ParsedEventRecord) => void
@@ -276,15 +322,22 @@ function EventListItem({record, isSelected, onSelect, refCallback}: {
 	return (
 		<Paper
 			onClick={() => onSelect(record)}
-			onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--mantine-color-dark-7)' }}
-			onMouseLeave={e => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent' }}
+			onMouseEnter={e => {
+				if (!isSelected)
+					e.currentTarget.style.backgroundColor = 'var(--mantine-color-dark-7)'
+			}}
+			onMouseLeave={e => {
+				if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent'
+			}}
 			p='md'
 			ref={refCallback}
 			style={{
 				cursor: 'pointer',
 				borderBottom: '1px solid var(--mantine-color-dark-4)',
 				borderLeft: `4px solid var(--mantine-color-${levelColor}-6)`,
-				backgroundColor: isSelected ? 'var(--mantine-color-dark-6)' : 'transparent',
+				backgroundColor: isSelected
+					? 'var(--mantine-color-dark-6)'
+					: 'transparent',
 				transition: 'background-color 0.1s'
 			}}
 		>
@@ -294,21 +347,36 @@ function EventListItem({record, isSelected, onSelect, refCallback}: {
 				</Box>
 				<Stack gap={4} style={{flex: 1, minWidth: 0, overflow: 'hidden'}}>
 					<Group gap='xs'>
-						<Text fw={500} size='sm'>{record.eventId}</Text>
-						<Badge color={levelColor} size='xs'>{record.levelText}</Badge>
+						<Text fw={500} size='sm'>
+							{record.eventId}
+						</Text>
+						<Badge color={levelColor} size='xs'>
+							{record.levelText}
+						</Badge>
 					</Group>
-					<Text c='dimmed' size='xs' truncate={true}>{record.provider}</Text>
+					<Text c='dimmed' size='xs' truncate={true}>
+						{record.provider}
+					</Text>
 					{record.eventData && (
-						<Text c='dimmed' lh={1.4} lineClamp={2} size='xs'>{record.eventData}</Text>
+						<Text c='dimmed' lh={1.4} lineClamp={2} size='xs'>
+							{record.eventData}
+						</Text>
 					)}
-					<Text c='dimmed' size='xs'>{formatRelativeTime(record.timestamp)}</Text>
+					<Text c='dimmed' size='xs'>
+						{formatRelativeTime(record.timestamp)}
+					</Text>
 				</Stack>
 			</Group>
 		</Paper>
 	)
 }
 
-function EventDetail({event, clipboard, onCopyJson, onCopyXml}: {
+function EventDetail({
+	event,
+	clipboard,
+	onCopyJson,
+	onCopyXml
+}: {
 	event: ParsedEventRecord
 	clipboard: {copied: boolean}
 	onCopyJson: () => void
@@ -318,7 +386,10 @@ function EventDetail({event, clipboard, onCopyJson, onCopyXml}: {
 
 	return (
 		<>
-			<Box p='md' style={{borderBottom: '1px solid var(--mantine-color-dark-4)'}}>
+			<Box
+				p='md'
+				style={{borderBottom: '1px solid var(--mantine-color-dark-4)'}}
+			>
 				<Group justify='space-between' wrap='wrap'>
 					<Group gap='sm'>
 						{LEVEL_ICONS[event.level] || LEVEL_ICONS[4]}
@@ -327,7 +398,9 @@ function EventDetail({event, clipboard, onCopyJson, onCopyXml}: {
 								<Title order={4}>Event {event.eventId}</Title>
 								<Badge color={levelColor}>{event.levelText}</Badge>
 							</Group>
-							<Text c='dimmed' size='sm'>{event.provider}</Text>
+							<Text c='dimmed' size='sm'>
+								{event.provider}
+							</Text>
 						</div>
 					</Group>
 					<Group gap='xs'>
@@ -337,17 +410,29 @@ function EventDetail({event, clipboard, onCopyJson, onCopyXml}: {
 								variant='default'
 								{...(clipboard.copied && {color: 'green'})}
 							>
-								{clipboard.copied ? <IconCheck size={18} /> : <IconCopy size={18} />}
+								{clipboard.copied ? (
+									<IconCheck size={18} />
+								) : (
+									<IconCopy size={18} />
+								)}
 							</ActionIcon>
 						</Tooltip>
-						<Button leftSection={<IconCopy size={14} />} onClick={onCopyXml} size='xs' variant='default'>
+						<Button
+							leftSection={<IconCopy size={14} />}
+							onClick={onCopyXml}
+							size='xs'
+							variant='default'
+						>
 							Copy XML
 						</Button>
 					</Group>
 				</Group>
 			</Box>
 
-			<Tabs defaultValue='eventdata' style={{flex: 1, display: 'flex', flexDirection: 'column'}}>
+			<Tabs
+				defaultValue='eventdata'
+				style={{flex: 1, display: 'flex', flexDirection: 'column'}}
+			>
 				<Tabs.List px='md'>
 					<Tabs.Tab value='eventdata'>Event Data</Tabs.Tab>
 					<Tabs.Tab value='general'>General</Tabs.Tab>
@@ -371,9 +456,17 @@ function EventDetail({event, clipboard, onCopyJson, onCopyXml}: {
 								{event.eventData && (
 									<>
 										<Box>
-											<Text fw={500} mb='xs' size='sm'>Description:</Text>
+											<Text fw={500} mb='xs' size='sm'>
+												Description:
+											</Text>
 											<Paper bg='dark.6' p='sm' withBorder={true}>
-												<Text size='sm' style={{whiteSpace: 'pre-wrap', wordBreak: 'break-word'}}>
+												<Text
+													size='sm'
+													style={{
+														whiteSpace: 'pre-wrap',
+														wordBreak: 'break-word'
+													}}
+												>
 													{event.eventData}
 												</Text>
 											</Paper>
@@ -390,7 +483,10 @@ function EventDetail({event, clipboard, onCopyJson, onCopyXml}: {
 
 					<Tabs.Panel h='100%' value='xml'>
 						<ScrollArea h='100%' p='md'>
-							<Code block={true} style={{maxWidth: '100%', overflowWrap: 'break-word'}}>
+							<Code
+								block={true}
+								style={{maxWidth: '100%', overflowWrap: 'break-word'}}
+							>
 								{prettyXml(event.xml)}
 							</Code>
 						</ScrollArea>
@@ -408,7 +504,10 @@ function EventDataView({eventData}: {eventData: string}) {
 	if (fields.length === 0) {
 		return (
 			<Paper bg='dark.6' p='sm' withBorder={true}>
-				<Text size='sm' style={{whiteSpace: 'pre-wrap', wordBreak: 'break-word'}}>
+				<Text
+					size='sm'
+					style={{whiteSpace: 'pre-wrap', wordBreak: 'break-word'}}
+				>
 					{eventData}
 				</Text>
 			</Paper>
@@ -418,16 +517,23 @@ function EventDataView({eventData}: {eventData: string}) {
 	return (
 		<Stack gap='md'>
 			{fields.map(f => (
-				<Group key={f.label} align='flex-start' gap='xs' wrap='nowrap'>
-					<Text fw={500} miw={140} size='sm'>{f.label}:</Text>
-					<Text size='sm' style={{wordBreak: 'break-word', flex: 1}}>{f.value}</Text>
+				<Group align='flex-start' gap='xs' key={f.label} wrap='nowrap'>
+					<Text fw={500} miw={140} size='sm'>
+						{f.label}:
+					</Text>
+					<Text size='sm' style={{wordBreak: 'break-word', flex: 1}}>
+						{f.value}
+					</Text>
 				</Group>
 			))}
 			{message && (
 				<>
 					<Divider />
 					<Paper bg='dark.6' p='sm' withBorder={true}>
-						<Text size='sm' style={{whiteSpace: 'pre-wrap', wordBreak: 'break-word'}}>
+						<Text
+							size='sm'
+							style={{whiteSpace: 'pre-wrap', wordBreak: 'break-word'}}
+						>
 							{message}
 						</Text>
 					</Paper>
@@ -441,14 +547,22 @@ function DetailSection({section}: {section: DetailSection}) {
 	return (
 		<>
 			{section.divider && <Divider label={section.divider} />}
-			{section.fields.map(f => f.value ? (
-				<Group key={f.label} align='flex-start' gap='xs' wrap='nowrap'>
-					<Text fw={500} miw={140} size='sm'>{f.label}:</Text>
-					<Text size='sm' {...(f.mono && {ff: 'monospace'})} style={{wordBreak: 'break-word', flex: 1}}>
-						{f.value}
-					</Text>
-				</Group>
-			) : null)}
+			{section.fields.map(f =>
+				f.value ? (
+					<Group align='flex-start' gap='xs' key={f.label} wrap='nowrap'>
+						<Text fw={500} miw={140} size='sm'>
+							{f.label}:
+						</Text>
+						<Text
+							size='sm'
+							{...(f.mono && {ff: 'monospace'})}
+							style={{wordBreak: 'break-word', flex: 1}}
+						>
+							{f.value}
+						</Text>
+					</Group>
+				) : null
+			)}
 		</>
 	)
 }

@@ -33,8 +33,6 @@ export class BinXmlParser {
 	chunkDv: DataView
 	chunkHeader: ChunkHeader | null
 	tplStats: TemplateStats
-	private chunkStart: number
-
 	constructor(
 		chunkDv: DataView,
 		chunkHeader: ChunkHeader | null,
@@ -43,7 +41,6 @@ export class BinXmlParser {
 		this.chunkDv = chunkDv
 		this.chunkHeader = chunkHeader
 		this.tplStats = tplStats
-		this.chunkStart = chunkHeader ? chunkHeader.chunkStart : 0
 	}
 
 	private readName(chunkRelOffset: number): string {
@@ -126,9 +123,7 @@ export class BinXmlParser {
 						valueBytes.byteOffset + i,
 						elemSize
 					)
-					results.push(
-						this.renderSubstitutionValue(elem, baseType)
-					)
+					results.push(this.renderSubstitutionValue(elem, baseType))
 				}
 				return results.join(', ')
 			}
@@ -187,14 +182,37 @@ export class BinXmlParser {
 			}
 			case VALUE_TYPE.GUID: {
 				if (valueBytes.length < 16) return ''
-				const d1 = this.chunkDv.getUint32(vOff, true).toString(16).padStart(8, '0')
-				const d2 = this.chunkDv.getUint16(vOff + 4, true).toString(16).padStart(4, '0')
-				const d3 = this.chunkDv.getUint16(vOff + 6, true).toString(16).padStart(4, '0')
-				return '{' + d1 + '-' + d2 + '-' + d3 + '-' +
-					HEX[valueBytes[8]!]! + HEX[valueBytes[9]!]! +
-					HEX[valueBytes[10]!]! + HEX[valueBytes[11]!]! + '-' +
-					HEX[valueBytes[12]!]! + HEX[valueBytes[13]!]! +
-					HEX[valueBytes[14]!]! + HEX[valueBytes[15]!]! + '}'
+				const d1 = this.chunkDv
+					.getUint32(vOff, true)
+					.toString(16)
+					.padStart(8, '0')
+				const d2 = this.chunkDv
+					.getUint16(vOff + 4, true)
+					.toString(16)
+					.padStart(4, '0')
+				const d3 = this.chunkDv
+					.getUint16(vOff + 6, true)
+					.toString(16)
+					.padStart(4, '0')
+				return (
+					'{' +
+					d1 +
+					'-' +
+					d2 +
+					'-' +
+					d3 +
+					'-' +
+					HEX[valueBytes[8]!]! +
+					HEX[valueBytes[9]!]! +
+					HEX[valueBytes[10]!]! +
+					HEX[valueBytes[11]!]! +
+					'-' +
+					HEX[valueBytes[12]!]! +
+					HEX[valueBytes[13]!]! +
+					HEX[valueBytes[14]!]! +
+					HEX[valueBytes[15]!]! +
+					'}'
+				)
 			}
 			case VALUE_TYPE.SIZE: {
 				if (valueBytes.length === 8)
@@ -230,7 +248,7 @@ export class BinXmlParser {
 				let sid = `S-${rev}-${auth}`
 				for (let i = 0; i < subCount; i++) {
 					if (8 + i * 4 + 4 > valueBytes.length) break
-					sid += '-' + this.chunkDv.getUint32(vOff + 8 + i * 4, true)
+					sid += `-${this.chunkDv.getUint32(vOff + 8 + i * 4, true)}`
 				}
 				return sid
 			}
@@ -239,7 +257,8 @@ export class BinXmlParser {
 			case VALUE_TYPE.HEX64:
 				return `0x${this.chunkDv.getBigUint64(vOff, true).toString(16).padStart(16, '0')}`
 			case VALUE_TYPE.BINXML: {
-				const embeddedChunkBase = valueBytes.byteOffset - this.chunkDv.byteOffset
+				const embeddedChunkBase =
+					valueBytes.byteOffset - this.chunkDv.byteOffset
 				return this.parseDocument(valueBytes, embeddedChunkBase)
 			}
 			default: {
@@ -247,7 +266,7 @@ export class BinXmlParser {
 				for (let i = 0; i < valueBytes.length; i++) {
 					hex += HEX[valueBytes[i]!]!
 				}
-				return '<!-- unknown value type 0x' + (HEX[valueType] ?? '??') + ' -->' + hex
+				return `<!-- unknown value type 0x${HEX[valueType] ?? '??'} -->${hex}`
 			}
 		}
 	}
@@ -270,7 +289,9 @@ export class BinXmlParser {
 		}
 
 		this.compileContent(tplBytes, pos, tplBodyStart, b)
-		return b.bail ? null : {parts: b.parts, subIds: b.subIds, isOptional: b.isOptional}
+		return b.bail
+			? null
+			: {parts: b.parts, subIds: b.subIds, isOptional: b.isOptional}
 	}
 
 	private compileContent(
@@ -322,18 +343,21 @@ export class BinXmlParser {
 				pos.offset++ // consume token
 				const charVal = this.chunkDv.getUint16(dvBias + pos.offset, true)
 				pos.offset += 2
-				b.parts[b.parts.length - 1] += '&#' + charVal + ';'
+				b.parts[b.parts.length - 1] += `&#${charVal};`
 			} else if (base === TOKEN.ENTITY_REF) {
 				pos.offset++ // consume token
 				const nameOff = this.chunkDv.getUint32(dvBias + pos.offset, true)
 				pos.offset += 4
 				const entityName = this.readName(nameOff)
-				b.parts[b.parts.length - 1] += '&' + entityName + ';'
+				b.parts[b.parts.length - 1] += `&${entityName};`
 			} else if (base === TOKEN.CDATA_SECTION) {
 				pos.offset++ // consume token
 				const cdataStr = this.readUnicodeTextString(bytes, pos, dvBias)
-				b.parts[b.parts.length - 1] += '<![CDATA[' + cdataStr + ']]>'
-			} else if (base === TOKEN.TEMPLATE_INSTANCE || base === TOKEN.FRAGMENT_HEADER) {
+				b.parts[b.parts.length - 1] += `<![CDATA[${cdataStr}]]>`
+			} else if (
+				base === TOKEN.TEMPLATE_INSTANCE ||
+				base === TOKEN.FRAGMENT_HEADER
+			) {
 				b.bail = true
 				return
 			} else {
@@ -361,12 +385,15 @@ export class BinXmlParser {
 		pos.offset += 4
 		// Inline name structure present only when defined here
 		if (nameOffset === binxmlChunkBase + pos.offset) {
-			const elemNameChars = this.chunkDv.getUint16(dvBias + pos.offset + 6, true)
+			const elemNameChars = this.chunkDv.getUint16(
+				dvBias + pos.offset + 6,
+				true
+			)
 			pos.offset += 10 + elemNameChars * 2
 		}
 
 		const elemName = this.readName(nameOffset)
-		b.parts[b.parts.length - 1] += '<' + elemName
+		b.parts[b.parts.length - 1] += `<${elemName}`
 
 		// Parse attribute list if present
 		if (hasAttrs) {
@@ -385,12 +412,15 @@ export class BinXmlParser {
 				pos.offset += 4
 				// Inline name structure present only when defined here
 				if (attrNameOff === binxmlChunkBase + pos.offset) {
-					const attrNameChars = this.chunkDv.getUint16(dvBias + pos.offset + 6, true)
+					const attrNameChars = this.chunkDv.getUint16(
+						dvBias + pos.offset + 6,
+						true
+					)
 					pos.offset += 10 + attrNameChars * 2
 				}
 				const attrName = this.readName(attrNameOff)
 
-				b.parts[b.parts.length - 1] += ' ' + attrName + '="'
+				b.parts[b.parts.length - 1] += ` ${attrName}="`
 				this.compileContent(bytes, pos, binxmlChunkBase, b)
 				if (b.bail) return
 				b.parts[b.parts.length - 1] += '"'
@@ -412,13 +442,20 @@ export class BinXmlParser {
 			b.parts[b.parts.length - 1] += '>'
 			this.compileContent(bytes, pos, binxmlChunkBase, b)
 			if (b.bail) return
-			if (pos.offset < bytes.length && bytes[pos.offset] === TOKEN.END_ELEMENT) {
+			if (
+				pos.offset < bytes.length &&
+				bytes[pos.offset] === TOKEN.END_ELEMENT
+			) {
 				pos.offset++
 			}
-			b.parts[b.parts.length - 1] += '</' + elemName + '>'
+			b.parts[b.parts.length - 1] += `</${elemName}>`
 		} else {
-			b.parts[b.parts.length - 1] += '><!-- UNEXPECTED close token 0x' +
-				(HEX[closeTok] ?? '??') + ' --></' + elemName + '>'
+			b.parts[b.parts.length - 1] +=
+				'><!-- UNEXPECTED close token 0x' +
+				(HEX[closeTok] ?? '??') +
+				' --></' +
+				elemName +
+				'>'
 		}
 	}
 
@@ -504,24 +541,30 @@ export class BinXmlParser {
 				pos.offset++ // consume token
 				const charVal = this.chunkDv.getUint16(dvBias + pos.offset, true)
 				pos.offset += 2
-				result += '&#' + charVal + ';'
+				result += `&#${charVal};`
 			} else if (base === TOKEN.ENTITY_REF) {
 				pos.offset++ // consume token
 				const nameOff = this.chunkDv.getUint32(dvBias + pos.offset, true)
 				pos.offset += 4
 				const entityName = this.readName(nameOff)
-				result += '&' + entityName + ';'
+				result += `&${entityName};`
 			} else if (base === TOKEN.CDATA_SECTION) {
 				pos.offset++ // consume token
 				const cdataStr = this.readUnicodeTextString(bytes, pos, dvBias)
-				result += '<![CDATA[' + cdataStr + ']]>'
+				result += `<![CDATA[${cdataStr}]]>`
 			} else if (base === TOKEN.TEMPLATE_INSTANCE) {
 				result += this.parseTemplateInstance(bytes, pos, binxmlChunkBase)
 			} else if (base === TOKEN.FRAGMENT_HEADER) {
 				result += this.parseFragment(bytes, pos, binxmlChunkBase)
 			} else {
-				result += '<!-- UNEXPECTED content token 0x' + (HEX[tok] ?? '??') +
-					' (' + tokenName(tok) + ') at offset ' + pos.offset + ' -->'
+				result +=
+					'<!-- UNEXPECTED content token 0x' +
+					(HEX[tok] ?? '??') +
+					' (' +
+					tokenName(tok) +
+					') at offset ' +
+					pos.offset +
+					' -->'
 				pos.offset++
 			}
 		}
@@ -546,12 +589,15 @@ export class BinXmlParser {
 		pos.offset += 4
 		// Inline name structure is present only when defined here (nameOffset points to current chunk position)
 		if (nameOffset === binxmlChunkBase + pos.offset) {
-			const elemNameChars = this.chunkDv.getUint16(dvBias + pos.offset + 6, true)
+			const elemNameChars = this.chunkDv.getUint16(
+				dvBias + pos.offset + 6,
+				true
+			)
 			pos.offset += 10 + elemNameChars * 2
 		}
 
 		const elemName = this.readName(nameOffset)
-		let xml = '<' + elemName
+		let xml = `<${elemName}`
 
 		// Parse attribute list if present
 		if (hasAttrs) {
@@ -569,42 +615,49 @@ export class BinXmlParser {
 				pos.offset += 4
 				// Inline name structure present only when defined here
 				if (attrNameOff === binxmlChunkBase + pos.offset) {
-					const attrNameChars = this.chunkDv.getUint16(dvBias + pos.offset + 6, true)
+					const attrNameChars = this.chunkDv.getUint16(
+						dvBias + pos.offset + 6,
+						true
+					)
 					pos.offset += 10 + attrNameChars * 2
 				}
 				const attrName = this.readName(attrNameOff)
 
-				const attrValue = this.parseContent(
-					bytes,
-					pos,
-					subs,
-					binxmlChunkBase
-				)
-				xml += ' ' + attrName + '="' + attrValue + '"'
+				const attrValue = this.parseContent(bytes, pos, subs, binxmlChunkBase)
+				xml += ` ${attrName}="${attrValue}"`
 			}
 		}
 
 		// Next token: CloseEmptyElement or CloseStartElement
 		if (pos.offset >= bytes.length) {
-			return xml + '/>'
+			return `${xml}/>`
 		}
 
 		const closeTok = bytes[pos.offset] ?? 0
 		if (closeTok === TOKEN.CLOSE_EMPTY_ELEMENT) {
 			pos.offset++ // consume 0x03
-			return xml + '/>'
-		} else if (closeTok === TOKEN.CLOSE_START_ELEMENT) {
+			return `${xml}/>`
+		}
+		if (closeTok === TOKEN.CLOSE_START_ELEMENT) {
 			pos.offset++ // consume 0x02
 			xml += '>'
 			xml += this.parseContent(bytes, pos, subs, binxmlChunkBase)
-			if (pos.offset < bytes.length && bytes[pos.offset] === TOKEN.END_ELEMENT) {
+			if (
+				pos.offset < bytes.length &&
+				bytes[pos.offset] === TOKEN.END_ELEMENT
+			) {
 				pos.offset++
 			}
-			return xml + '</' + elemName + '>'
-		} else {
-			return xml + '><!-- UNEXPECTED close token 0x' + (HEX[closeTok] ?? '??') +
-				' --></' + elemName + '>'
+			return `${xml}</${elemName}>`
 		}
+		return (
+			xml +
+			'><!-- UNEXPECTED close token 0x' +
+			(HEX[closeTok] ?? '??') +
+			' --></' +
+			elemName +
+			'>'
+		)
 	}
 
 	private parseTemplateInstance(
@@ -650,7 +703,8 @@ export class BinXmlParser {
 					}
 				}
 				if (!this.tplStats.definitions[guidStr]) {
-					this.tplStats.definitions[guidStr] = this.tplStats.defsByOffset[defDataOffset]!
+					this.tplStats.definitions[guidStr] =
+						this.tplStats.defsByOffset[defDataOffset]!
 					this.tplStats.definitionCount++
 				}
 			}
@@ -680,7 +734,8 @@ export class BinXmlParser {
 					firstSeenRecord: this.tplStats.currentRecordId
 				}
 				if (!this.tplStats.definitions[guidStr]) {
-					this.tplStats.definitions[guidStr] = this.tplStats.defsByOffset[defDataOffset]!
+					this.tplStats.definitions[guidStr] =
+						this.tplStats.defsByOffset[defDataOffset]!
 					this.tplStats.definitionCount++
 				}
 			}
@@ -767,12 +822,7 @@ export class BinXmlParser {
 					tplPos.offset += 4
 				}
 
-				xml = this.parseContent(
-					tplBytes,
-					tplPos,
-					subs,
-					tplBodyStart
-				)
+				xml = this.parseContent(tplBytes, tplPos, subs, tplBodyStart)
 			}
 		} catch (e) {
 			xml = `<!-- template parse error: ${e instanceof Error ? e.message : String(e)} -->`
@@ -791,10 +841,7 @@ export class BinXmlParser {
 		return xml
 	}
 
-	parseDocument(
-		binxml: Uint8Array,
-		binxmlChunkBase: number
-	): string {
+	parseDocument(binxml: Uint8Array, binxmlChunkBase: number): string {
 		const pos: ParsePosition = {offset: 0}
 		const dvBias = binxml.byteOffset - this.chunkDv.byteOffset
 		let result = ''
@@ -813,16 +860,25 @@ export class BinXmlParser {
 				const piNameOff = this.chunkDv.getUint32(dvBias + pos.offset, true)
 				pos.offset += 4
 				const piName = this.readName(piNameOff)
-				let pi = '<?' + piName
-				if (pos.offset < binxml.length && binxml[pos.offset] === TOKEN.PI_DATA) {
+				let pi = `<?${piName}`
+				if (
+					pos.offset < binxml.length &&
+					binxml[pos.offset] === TOKEN.PI_DATA
+				) {
 					pos.offset++ // consume 0x0B
 					const piText = this.readUnicodeTextString(binxml, pos, dvBias)
-					if (piText) pi += ' ' + piText
+					if (piText) pi += ` ${piText}`
 				}
-				result += pi + '?>'
+				result += `${pi}?>`
 			} else {
-				result += '<!-- UNEXPECTED document token 0x' + (HEX[tok] ?? '??') +
-					' (' + tokenName(tok) + ') at offset ' + pos.offset + ' -->'
+				result +=
+					'<!-- UNEXPECTED document token 0x' +
+					(HEX[tok] ?? '??') +
+					' (' +
+					tokenName(tok) +
+					') at offset ' +
+					pos.offset +
+					' -->'
 				break
 			}
 		}
@@ -855,8 +911,15 @@ export class BinXmlParser {
 		if (nextBase === TOKEN.OPEN_START_ELEMENT) {
 			return this.parseElement(binxml, pos, null, binxmlChunkBase)
 		}
-		return '<!-- UNEXPECTED post-fragment token 0x' + (HEX[nextTok] ?? '??') +
-			' (' + tokenName(nextTok) + ') at offset ' + pos.offset + ' -->\n'
+		return (
+			'<!-- UNEXPECTED post-fragment token 0x' +
+			(HEX[nextTok] ?? '??') +
+			' (' +
+			tokenName(nextTok) +
+			') at offset ' +
+			pos.offset +
+			' -->\n'
+		)
 	}
 }
 
@@ -868,6 +931,8 @@ export function parseBinXmlDocument(
 	tplStats: TemplateStats,
 	binxmlChunkBase: number
 ): string {
-	return new BinXmlParser(chunkDv, chunkHeader, tplStats)
-		.parseDocument(binxml, binxmlChunkBase)
+	return new BinXmlParser(chunkDv, chunkHeader, tplStats).parseDocument(
+		binxml,
+		binxmlChunkBase
+	)
 }

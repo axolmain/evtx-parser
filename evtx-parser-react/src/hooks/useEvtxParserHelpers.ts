@@ -1,8 +1,18 @@
-import type {EvtxParseResult, ParsedEventRecord, TemplateStatsSummary} from '@/parser'
+import type {
+	EvtxParseResult,
+	ParsedEventRecord,
+	TemplateStatsSummary
+} from '@/parser'
 
 type WorkerMessage =
 	| {type: 'records'; records: ParsedEventRecord[]; progress: number}
-	| {type: 'done'; tplStats: TemplateStatsSummary; warnings: string[]; totalRecords: number; numChunks: number}
+	| {
+			type: 'done'
+			tplStats: TemplateStatsSummary
+			warnings: string[]
+			totalRecords: number
+			numChunks: number
+	  }
 	| {type: 'error'; message: string}
 
 export interface ParseTimedResult {
@@ -58,7 +68,7 @@ export function parseFileBuffer(
 					break
 			}
 		}
-		w.onerror = (e) => reject(new Error(e.message))
+		w.onerror = e => reject(new Error(e.message))
 		w.postMessage(buffer, [buffer])
 	})
 }

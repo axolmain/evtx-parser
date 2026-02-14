@@ -31,7 +31,7 @@ export function GlobalSearch() {
 			if (query.trim()) {
 				setIsSearching(true)
 				try {
-					const events = await dbService.searchEvents({ query }, 100)
+					const events = await dbService.searchEvents({query}, 100)
 					setResults(events)
 				} catch {
 					setResults([])

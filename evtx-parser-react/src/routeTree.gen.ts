@@ -8,96 +8,70 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as ArchiveArchiveIdRouteImport } from './routes/archive/$archiveId'
-import { Route as ArchiveArchiveIdIndexRouteImport } from './routes/archive/$archiveId/index'
+import {Route as rootRouteImport} from './routes/__root'
+import {Route as ArchiveArchiveIdRouteImport} from './routes/archive/$archiveId'
+import {Route as IndexRouteImport} from './routes/index'
 
 const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
+	id: '/',
+	path: '/',
+	getParentRoute: () => rootRouteImport
 } as any)
 const ArchiveArchiveIdRoute = ArchiveArchiveIdRouteImport.update({
-  id: '/archive/$archiveId',
-  path: '/archive/$archiveId',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ArchiveArchiveIdIndexRoute = ArchiveArchiveIdIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => ArchiveArchiveIdRoute,
+	id: '/archive/$archiveId',
+	path: '/archive/$archiveId',
+	getParentRoute: () => rootRouteImport
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/archive/$archiveId': typeof ArchiveArchiveIdRouteWithChildren
-  '/archive/$archiveId/': typeof ArchiveArchiveIdIndexRoute
+	'/': typeof IndexRoute
+	'/archive/$archiveId': typeof ArchiveArchiveIdRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/archive/$archiveId': typeof ArchiveArchiveIdIndexRoute
+	'/': typeof IndexRoute
+	'/archive/$archiveId': typeof ArchiveArchiveIdRoute
 }
 export interface FileRoutesById {
-  __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/archive/$archiveId': typeof ArchiveArchiveIdRouteWithChildren
-  '/archive/$archiveId/': typeof ArchiveArchiveIdIndexRoute
+	__root__: typeof rootRouteImport
+	'/': typeof IndexRoute
+	'/archive/$archiveId': typeof ArchiveArchiveIdRoute
 }
 export interface FileRouteTypes {
-  fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/archive/$archiveId' | '/archive/$archiveId/'
-  fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/archive/$archiveId'
-  id: '__root__' | '/' | '/archive/$archiveId' | '/archive/$archiveId/'
-  fileRoutesById: FileRoutesById
+	fileRoutesByFullPath: FileRoutesByFullPath
+	fullPaths: '/' | '/archive/$archiveId'
+	fileRoutesByTo: FileRoutesByTo
+	to: '/' | '/archive/$archiveId'
+	id: '__root__' | '/' | '/archive/$archiveId'
+	fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  ArchiveArchiveIdRoute: typeof ArchiveArchiveIdRouteWithChildren
+	IndexRoute: typeof IndexRoute
+	ArchiveArchiveIdRoute: typeof ArchiveArchiveIdRoute
 }
 
 declare module '@tanstack/react-router' {
-  interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/archive/$archiveId': {
-      id: '/archive/$archiveId'
-      path: '/archive/$archiveId'
-      fullPath: '/archive/$archiveId'
-      preLoaderRoute: typeof ArchiveArchiveIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/archive/$archiveId/': {
-      id: '/archive/$archiveId/'
-      path: '/'
-      fullPath: '/archive/$archiveId/'
-      preLoaderRoute: typeof ArchiveArchiveIdIndexRouteImport
-      parentRoute: typeof ArchiveArchiveIdRoute
-    }
-  }
+	interface FileRoutesByPath {
+		'/': {
+			id: '/'
+			path: '/'
+			fullPath: '/'
+			preLoaderRoute: typeof IndexRouteImport
+			parentRoute: typeof rootRouteImport
+		}
+		'/archive/$archiveId': {
+			id: '/archive/$archiveId'
+			path: '/archive/$archiveId'
+			fullPath: '/archive/$archiveId'
+			preLoaderRoute: typeof ArchiveArchiveIdRouteImport
+			parentRoute: typeof rootRouteImport
+		}
+	}
 }
-
-interface ArchiveArchiveIdRouteChildren {
-  ArchiveArchiveIdIndexRoute: typeof ArchiveArchiveIdIndexRoute
-}
-
-const ArchiveArchiveIdRouteChildren: ArchiveArchiveIdRouteChildren = {
-  ArchiveArchiveIdIndexRoute: ArchiveArchiveIdIndexRoute,
-}
-
-const ArchiveArchiveIdRouteWithChildren =
-  ArchiveArchiveIdRoute._addFileChildren(ArchiveArchiveIdRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  ArchiveArchiveIdRoute: ArchiveArchiveIdRouteWithChildren,
+	IndexRoute,
+	ArchiveArchiveIdRoute
 }
 export const routeTree = rootRouteImport
-  ._addFileChildren(rootRouteChildren)
-  ._addFileTypes<FileRouteTypes>()
+	._addFileChildren(rootRouteChildren)
+	._addFileTypes<FileRouteTypes>()

@@ -1,4 +1,4 @@
-import {BlobReader, BlobWriter, ZipReader} from '@zip.js/zip.js'
+import {BlobReader, BlobWriter, type FileEntry, ZipReader} from '@zip.js/zip.js'
 import * as dbService from '@/db/service'
 import type {FileType} from './fileTypes'
 import {detectFileType} from './fileTypes'
@@ -28,7 +28,9 @@ export async function uploadZipFile(
 		}
 
 		// Single pass: build metadata, count viewable, accumulate totalSize
-		const rawEntries = entries.filter(e => !e.directory && e.filename)
+		const rawEntries = entries.filter(
+			(e): e is FileEntry => !e.directory && Boolean(e.filename)
+		)
 		const fileEntries: ZipFileEntry[] = []
 		let totalSize = 0
 		let viewableCount = 0
@@ -63,7 +65,6 @@ export async function uploadZipFile(
 				const i = next++
 				const entry = rawEntries[i]!
 				const meta = fileEntries[i]!
-				if (typeof entry.getData !== 'function') continue
 				try {
 					onProgress?.(`Extracting ${entry.filename}...`)
 					const blob = await entry.getData(new BlobWriter())

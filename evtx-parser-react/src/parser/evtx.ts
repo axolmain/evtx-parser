@@ -1,7 +1,7 @@
-import { BinXmlParser } from './binxml'
-import { HEX } from './constants'
+import {BinXmlParser} from './binxml'
+import {HEX} from './constants'
 // import {formatChunkHeaderComment, formatRecordComment} from './format'
-import { filetimeToIso, formatGuid } from './helpers'
+import {filetimeToIso, formatGuid} from './helpers'
 import type {
 	ChunkHeader,
 	EvtxParseResult,
@@ -11,7 +11,7 @@ import type {
 	ParsedEventRecord,
 	TemplateStats
 } from './types'
-import { parseEventXml } from './xml-helper'
+import {parseEventXml} from './xml-helper'
 
 const LEVEL_NAMES: Record<number, string> = {
 	1: 'Critical',
@@ -21,33 +21,32 @@ const LEVEL_NAMES: Record<number, string> = {
 	5: 'Verbose'
 }
 
-
-
 export function parseFileHeader(
-    buffer: ArrayBuffer | SharedArrayBuffer,
+	buffer: ArrayBuffer | SharedArrayBuffer,
 	dv: DataView | undefined
 ): FileHeader {
-    // Single DataView instead of 3 typed array allocations
-    dv ??= new DataView(buffer, 0, 124);
+	// Single DataView instead of 3 typed array allocations
+	dv ??= new DataView(buffer, 0, 124)
 
-    // "ElfFile" magic in 3 comparisons instead of 7:
-    // Big-endian reads so bytes compare in natural order
-    if (
-        dv.getUint32(0, false) !== 0x456C6646 || // "ElfF"
-        dv.getUint16(4, false) !== 0x696C ||      // "il"
-        dv.getUint8(6) !== 0x65                    // "e"
-    ) throw new Error('Not a valid EVTX file');
+	// "ElfFile" magic in 3 comparisons instead of 7:
+	// Big-endian reads so bytes compare in natural order
+	if (
+		dv.getUint32(0, false) !== 0x45_6c_66_46 || // "ElfF"
+		dv.getUint16(4, false) !== 0x69_6c || // "il"
+		dv.getUint8(6) !== 0x65 // "e"
+	)
+		throw new Error('Not a valid EVTX file')
 
-    // locations found @ https://github.com/libyal/libevtx/blob/main/documentation/Windows%20XML%20Event%20Log%20(EVTX).asciidoc#2-file-header
-    const headerBlockSize = dv.getUint16(40, true);
-    const flags = dv.getUint32(120, true);
+	// locations found @ https://github.com/libyal/libevtx/blob/main/documentation/Windows%20XML%20Event%20Log%20(EVTX).asciidoc#2-file-header
+	const headerBlockSize = dv.getUint16(40, true)
+	const flags = dv.getUint32(120, true)
 
-    return {
-        headerBlockSize,
-        flags,
-        isDirty: (flags & 0x01) !== 0,
-        isFull: (flags & 0x02) !== 0
-    };
+	return {
+		headerBlockSize,
+		flags,
+		isDirty: (flags & 0x01) !== 0,
+		isFull: (flags & 0x02) !== 0
+	}
 }
 
 export function parseChunkHeader(
@@ -208,9 +207,9 @@ export function discoverChunkOffsets(
 	while (off + 65_536 <= dv.byteLength) {
 		// "ElfChnk" magic in 3 comparisons instead of 7
 		if (
-			dv.getUint32(off, false) === 0x456C6643 && // "ElfC"
-			dv.getUint16(off + 4, false) === 0x686E && // "hn"
-			dv.getUint8(off + 6) === 0x6B              // "k"
+			dv.getUint32(off, false) === 0x45_6c_66_43 && // "ElfC"
+			dv.getUint16(off + 4, false) === 0x68_6e && // "hn"
+			dv.getUint8(off + 6) === 0x6b // "k"
 		) {
 			offsets.push(off)
 		}
@@ -273,16 +272,13 @@ export function parseEventRecord(
 	tplStats: TemplateStats,
 	chunkIndex: number,
 	parser?: BinXmlParser
-): { xml: string; record: ParsedEventRecord } {
+): {xml: string; record: ParsedEventRecord} {
 	const binxmlChunkBase = r.chunkOffset + 24
 	const p = parser ?? new BinXmlParser(chunkDv, header, tplStats)
 
 	let parsedXml = ''
 	try {
-		parsedXml = p.parseDocument(
-			r.binxmlBytes,
-			binxmlChunkBase
-		)
+		parsedXml = p.parseDocument(r.binxmlBytes, binxmlChunkBase)
 	} catch (e) {
 		parsedXml = `<!-- BinXml parse error: ${e instanceof Error ? e.message : String(e)} -->\n`
 		tplStats.parseErrors.push({
@@ -311,7 +307,10 @@ export function parseEvtx(
 ): EvtxParseResult {
 	const dv = new DataView(buffer)
 	const fileHeader: FileHeader = parseFileHeader(buffer, dv)
-	const chunkOffsets: number[] = discoverChunkOffsets(dv, fileHeader.headerBlockSize)
+	const chunkOffsets: number[] = discoverChunkOffsets(
+		dv,
+		fileHeader.headerBlockSize
+	)
 
 	const tplStats: TemplateStats = {
 		compiled: new Map(),
@@ -352,8 +351,13 @@ export function parseEvtx(
 			const r = chunk.records[ri]!
 			tplStats.currentRecordId = r.recordId
 
-			const { record } = parseEventRecord(
-				r, chunkDv, chunk.header, tplStats, ci, parser
+			const {record} = parseEventRecord(
+				r,
+				chunkDv,
+				chunk.header,
+				tplStats,
+				ci,
+				parser
 			)
 			parsedRecords.push(record)
 			if (onBatch) batch.push(record)
@@ -380,7 +384,7 @@ export function parseEvtx(
 			definitionCount: tplStats.definitionCount,
 			referenceCount: tplStats.referenceCount,
 			missingCount: tplStats.missingCount,
-			parseErrorCount: tplStats.parseErrors.length,
+			parseErrorCount: tplStats.parseErrors.length
 		}
 	}
 }

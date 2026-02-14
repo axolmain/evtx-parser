@@ -1,14 +1,13 @@
-import { Badge, Code } from '@mantine/core'
-import { useLocalStorage } from '@mantine/hooks'
-import type { ExpandedState } from '@tanstack/react-table'
+import {Badge, Code} from '@mantine/core'
+
 import {
 	MantineReactTable,
 	type MRT_ColumnDef,
 	type MRT_VisibilityState,
 	useMantineReactTable
 } from 'mantine-react-table'
-import { useEffect, useMemo, useState } from 'react'
-import type { ParsedEventRecord } from '@/parser'
+import {useEffect, useMemo} from 'react'
+import type {ParsedEventRecord} from '@/parser'
 
 interface Properties {
 	records: ParsedEventRecord[]
@@ -25,6 +24,9 @@ const LEVEL_COLORS: Record<number, string> = {
 }
 
 const DEFAULT_HIDDEN: MRT_VisibilityState = {
+	recordId: false,
+	eventId: false,
+	channel: false,
 	task: false,
 	opcode: false,
 	keywords: false,
@@ -34,61 +36,41 @@ const DEFAULT_HIDDEN: MRT_VisibilityState = {
 	threadId: false,
 	securityUserId: false,
 	activityId: false,
-	relatedActivityId: false,
-	channel: false,
-	eventData: false
+	relatedActivityId: false
 }
 
-const LEVEL_SORT: Record<string, number> = {
-	LogAlways: 0,
-	Critical: 1,
-	Error: 2,
-	Warning: 3,
-	Information: 4,
-	Verbose: 5
-}
+const mono = {ff: 'monospace', fz: 'xs', c: 'dimmed'} as const
+const dim = {fz: 'sm', c: 'dimmed'} as const
+const sm = {fz: 'sm'} as const
+
+const col = (
+	accessorKey: keyof ParsedEventRecord & string,
+	header: string,
+	cellProps: Record<string, unknown> = sm,
+	extra?: Partial<MRT_ColumnDef<ParsedEventRecord>>
+): MRT_ColumnDef<ParsedEventRecord> =>
+	({
+		accessorKey,
+		header,
+		mantineTableBodyCellProps: cellProps,
+		...extra
+	}) as MRT_ColumnDef<ParsedEventRecord>
 
 export function EventsTable({records, selectedRecordId}: Properties) {
-	const [columnVisibility, setColumnVisibility] =
-		useLocalStorage<MRT_VisibilityState>({
-			key: 'evtx-column-visibility',
-			defaultValue: DEFAULT_HIDDEN
-		})
-	const [expanded, setExpanded] = useState<ExpandedState>({})
-
-	useEffect(() => {
-		if (selectedRecordId === null) return
-		const rowIndex = records.findIndex(r => r.recordId === selectedRecordId)
-		if (rowIndex === -1) return
-		setExpanded({[rowIndex]: true})
-		requestAnimationFrame(() => {
-			document
-				.querySelector(`[data-index="${rowIndex}"]`)
-				?.scrollIntoView({behavior: 'smooth', block: 'center'})
-		})
-	}, [selectedRecordId, records])
-
 	const columns = useMemo<MRT_ColumnDef<ParsedEventRecord>[]>(
 		() => [
-			{
-				accessorKey: 'recordId',
-				header: 'Record ID',
-				enableColumnFilter: false,
-				mantineTableBodyCellProps: {fz: 'sm', c: 'dimmed'}
-			},
-			{
-				accessorKey: 'timestamp',
-				header: 'Time',
-				enableColumnFilter: false,
-				mantineTableBodyCellProps: {ff: 'monospace', fz: 'sm'}
-			},
+			col('recordId', 'Record ID', dim, {enableColumnFilter: false}),
+			col(
+				'timestamp',
+				'Time',
+				{ff: 'monospace', fz: 'sm'},
+				{enableColumnFilter: false}
+			),
 			{
 				accessorKey: 'levelText',
 				header: 'Level',
 				filterVariant: 'multi-select',
-				sortingFn: (a, b) =>
-					(LEVEL_SORT[a.original.levelText] ?? 99) -
-					(LEVEL_SORT[b.original.levelText] ?? 99),
+				sortingFn: (a, b) => a.original.level - b.original.level,
 				Cell: ({row}) => (
 					<Badge
 						color={LEVEL_COLORS[row.original.level] ?? 'gray'}
@@ -99,86 +81,34 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 					</Badge>
 				)
 			},
-			{
-				accessorKey: 'eventId',
-				header: 'Event ID',
-				filterVariant: 'multi-select',
-				mantineTableBodyCellProps: {fz: 'sm', fw: 500}
-			},
-			{
-				accessorKey: 'provider',
-				header: 'Provider',
-				filterVariant: 'multi-select',
-				mantineTableBodyCellProps: {fz: 'sm'}
-			},
-			{
-				accessorKey: 'channel',
-				header: 'Channel',
-				filterVariant: 'multi-select',
-				mantineTableBodyCellProps: {fz: 'sm', c: 'dimmed'}
-			},
-			{
-				accessorKey: 'task',
-				header: 'Task',
-				mantineTableBodyCellProps: {fz: 'sm'}
-			},
-			{
-				accessorKey: 'opcode',
-				header: 'Opcode',
-				mantineTableBodyCellProps: {fz: 'sm'}
-			},
-			{
-				accessorKey: 'keywords',
-				header: 'Keywords',
-				mantineTableBodyCellProps: {ff: 'monospace', fz: 'xs', c: 'dimmed'}
-			},
-			{
-				accessorKey: 'version',
-				header: 'Ver',
-				mantineTableBodyCellProps: {fz: 'sm', c: 'dimmed'}
-			},
-			{
-				accessorKey: 'computer',
-				header: 'Computer',
-				filterVariant: 'multi-select',
-				mantineTableBodyCellProps: {fz: 'sm'}
-			},
-			{
-				accessorKey: 'processId',
-				header: 'PID',
-				mantineTableBodyCellProps: {ff: 'monospace', fz: 'xs', c: 'dimmed'}
-			},
-			{
-				accessorKey: 'threadId',
-				header: 'TID',
-				mantineTableBodyCellProps: {ff: 'monospace', fz: 'xs', c: 'dimmed'}
-			},
-			{
-				accessorKey: 'securityUserId',
-				header: 'User ID',
-				mantineTableBodyCellProps: {ff: 'monospace', fz: 'xs', c: 'dimmed'}
-			},
-			{
-				accessorKey: 'activityId',
-				header: 'Activity ID',
-				mantineTableBodyCellProps: {ff: 'monospace', fz: 'xs', c: 'dimmed'}
-			},
-			{
-				accessorKey: 'relatedActivityId',
-				header: 'Related Activity',
-				mantineTableBodyCellProps: {ff: 'monospace', fz: 'xs', c: 'dimmed'}
-			},
-			{
-				accessorKey: 'eventData',
-				header: 'Event Data',
-				size: 400,
-				enableColumnFilter: false,
-				mantineTableBodyCellProps: {
+			col(
+				'eventId',
+				'Event ID',
+				{fz: 'sm', fw: 500},
+				{filterVariant: 'multi-select'}
+			),
+			col('provider', 'Provider', sm, {filterVariant: 'multi-select'}),
+			col('channel', 'Channel', dim, {filterVariant: 'multi-select'}),
+			col('task', 'Task'),
+			col('opcode', 'Opcode'),
+			col('keywords', 'Keywords', mono),
+			col('version', 'Ver', dim),
+			col('computer', 'Computer', sm, {filterVariant: 'multi-select'}),
+			col('processId', 'PID', mono),
+			col('threadId', 'TID', mono),
+			col('securityUserId', 'User ID', mono),
+			col('activityId', 'Activity ID', mono),
+			col('relatedActivityId', 'Related Activity', mono),
+			col(
+				'eventData',
+				'Event Data',
+				{
 					fz: 'xs',
 					c: 'dimmed',
 					style: {whiteSpace: 'pre-wrap' as const, maxWidth: 400}
-				}
-			}
+				},
+				{size: 400, enableColumnFilter: false}
+			)
 		],
 		[]
 	)
@@ -186,42 +116,35 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 	const table = useMantineReactTable({
 		columns,
 		data: records,
-		enableColumnFilterModes: true,
 		enableFacetedValues: true,
 		enableColumnResizing: true,
-		enableStickyHeader: true,
 		enableDensityToggle: true,
 		enableFullScreenToggle: true,
-		state: {columnVisibility, expanded},
-		onColumnVisibilityChange: setColumnVisibility,
-		onExpandedChange: setExpanded,
+		paginationDisplayMode: 'pages',
+		mantinePaginationProps: {radius: 'md', size: 'sm'},
 		initialState: {
 			density: 'xs',
 			showGlobalFilter: true,
-			pagination: {pageIndex: 0, pageSize: 50},
+			columnVisibility: DEFAULT_HIDDEN
 		},
-		paginationDisplayMode: 'pages',
-		mantinePaginationProps: {
-			radius: 'md',
-			size: 'sm',
-		},
-		mantineSearchTextInputProps: {
-			placeholder: 'Search events...',
+		mantineSearchTextInputProps: {placeholder: 'Search events...'},
+		mantinePaperProps: {
+			style: {
+				width: '100%',
+				height: '100%'
+			}
 		},
 		mantineTableProps: {
 			striped: 'odd',
 			highlightOnHover: true,
-			withTableBorder: true,
-			style: {minWidth: 'max-content'},
+			withTableBorder: true
 		},
 		mantineTableHeadCellProps: {
 			style: {fontSize: '0.8rem', whiteSpace: 'nowrap'},
 			className: 'compact-table-header'
 		},
-		mantineTableBodyCellProps: {
-			style: {whiteSpace: 'nowrap'}
-		},
-		mantineTableContainerProps: {style: {maxHeight: '600px', overflowX: 'auto'}},
+		mantineTableBodyCellProps: {style: {whiteSpace: 'nowrap'}},
+		mantineTableContainerProps: {style: {maxHeight: '600px'}},
 		renderDetailPanel: ({row}) => (
 			<Code block={true} fz='xs' mah={400} style={{overflow: 'auto'}}>
 				{row.original.xml}
@@ -229,6 +152,18 @@ export function EventsTable({records, selectedRecordId}: Properties) {
 		),
 		mantineTableBodyRowProps: {style: {cursor: 'pointer'}}
 	})
+
+	useEffect(() => {
+		if (selectedRecordId === null) return
+		const rowIndex = records.findIndex(r => r.recordId === selectedRecordId)
+		if (rowIndex === -1) return
+		table.setExpanded({[rowIndex]: true})
+		requestAnimationFrame(() => {
+			document
+				.querySelector(`[data-index="${rowIndex}"]`)
+				?.scrollIntoView({behavior: 'smooth', block: 'center'})
+		})
+	}, [selectedRecordId, records, table.setExpanded])
 
 	if (records.length === 0) return null
 

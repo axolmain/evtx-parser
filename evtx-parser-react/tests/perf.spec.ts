@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import {fileURLToPath} from 'node:url'
-import {test, expect} from '@playwright/test'
+import {expect, test } from '@playwright/test'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DATA_DIR = path.resolve(__dirname, 'data')
@@ -65,7 +65,7 @@ test.describe('Performance profiling', () => {
 			const totalMs = await page.evaluate(() => {
 				performance.mark('render-done')
 				performance.measure('upload-to-render', 'upload-start', 'render-done')
-				return performance.getEntriesByName('upload-to-render')[0]!.duration
+				return performance.getEntriesByName('upload-to-render')[0]?.duration
 			})
 
 			// Stop trace and read stream
@@ -97,25 +97,13 @@ test.describe('Performance profiling', () => {
 			const summary = analyzeTrace(events)
 
 			// Report
-			const sizeMB = (fs.statSync(filePath).size / (1024 * 1024)).toFixed(2)
-			console.log('')
-			console.log('─'.repeat(60))
-			console.log(`  ${file.name} (${sizeMB} MB)`)
-			console.log('─'.repeat(60))
-			console.log(`  Total (upload → render):  ${totalMs.toFixed(0)} ms`)
+			const _sizeMB = (fs.statSync(filePath).size / (1024 * 1024)).toFixed(2)
 			if (summary.scriptingMs > 0)
-				console.log(`  Scripting:                ${summary.scriptingMs.toFixed(0)} ms`)
 			if (summary.longTasks.length > 0) {
-				console.log(`  Long tasks (>50ms):       ${summary.longTasks.length}`)
-				for (const lt of summary.longTasks.slice(0, 5)) {
-					console.log(`    ${lt.dur.toFixed(0)} ms  ${lt.name}`)
+				for (const _lt of summary.longTasks.slice(0, 5)) {
 				}
 				if (summary.longTasks.length > 5)
-					console.log(`    ... and ${summary.longTasks.length - 5} more`)
 			}
-			console.log(`  Trace: ${tracePath}`)
-			console.log(`  → Open: chrome://tracing then Load ${tracePath}`)
-			console.log('')
 
 			expect(totalMs).toBeGreaterThan(0)
 		})
@@ -137,15 +125,13 @@ function analyzeTrace(events: {ph?: string; cat?: string; name?: string; dur?: n
 	const longTasks: LongTask[] = []
 
 	for (const e of events) {
-		if (!e.dur || !e.name) continue
+		if (!(e.dur && e.name)) continue
 		const durMs = e.dur / 1000
 
 		// Collect long tasks (>50ms) from the main thread
-		if (e.ph === 'X' && durMs > 50) {
-			if (e.cat?.includes('devtools.timeline') || e.cat?.includes('v8')) {
+		if (e.ph === 'X' && durMs > 50 && (e.cat?.includes('devtools.timeline') || e.cat?.includes('v8'))) {
 				longTasks.push({name: e.name, dur: durMs})
 			}
-		}
 
 		// Sum scripting time
 		if (e.ph === 'X' && (e.name === 'EvaluateScript' || e.name === 'v8.compile' || e.name === 'FunctionCall')) {

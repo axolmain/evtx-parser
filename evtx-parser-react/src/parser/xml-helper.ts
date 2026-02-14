@@ -29,40 +29,47 @@ const EMPTY_RESULT = {
 
 /** Extract text between <tag ...>text</tag>. Returns [value, endPos]. */
 function tagTextFrom(xml: string, tag: string, from: number): [string, number] {
-	const needle = '<' + tag
+	const needle = `<${tag}`
 	const nLen = needle.length
 	let open = from
 	while (true) {
 		open = xml.indexOf(needle, open)
 		if (open === -1) return ['', from]
 		const c = xml.charCodeAt(open + nLen)
-		if (c === 62 || c === 32 || c === 47 || c === 9 || c === 10 || c === 13) break // > space / \t \n \r
+		if (c === 62 || c === 32 || c === 47 || c === 9 || c === 10 || c === 13)
+			break // > space / \t \n \r
 		open += nLen
 	}
 	const gt = xml.indexOf('>', open + nLen)
 	if (gt === -1) return ['', from]
 	if (xml.charCodeAt(gt - 1) === 47) return ['', gt + 1] // self-closing />
-	const closeTag = '</' + tag + '>'
+	const closeTag = `</${tag}>`
 	const close = xml.indexOf(closeTag, gt + 1)
 	if (close === -1) return ['', gt + 1]
 	return [xml.substring(gt + 1, close), close + closeTag.length]
 }
 
 /** Extract attribute value from <tag attr="value" ...>. Returns [value, endPosAfterGt]. */
-function attrValFrom(xml: string, tag: string, attr: string, from: number): [string, number] {
-	const needle = '<' + tag
+function attrValFrom(
+	xml: string,
+	tag: string,
+	attr: string,
+	from: number
+): [string, number] {
+	const needle = `<${tag}`
 	const nLen = needle.length
 	let open = from
 	while (true) {
 		open = xml.indexOf(needle, open)
 		if (open === -1) return ['', from]
 		const c = xml.charCodeAt(open + nLen)
-		if (c === 62 || c === 32 || c === 47 || c === 9 || c === 10 || c === 13) break
+		if (c === 62 || c === 32 || c === 47 || c === 9 || c === 10 || c === 13)
+			break
 		open += nLen
 	}
 	const gt = xml.indexOf('>', open)
 	if (gt === -1) return ['', from]
-	const search = attr + '="'
+	const search = `${attr}="`
 	const aStart = xml.indexOf(search, open + nLen)
 	if (aStart === -1 || aStart >= gt) return ['', gt + 1]
 	const vStart = aStart + search.length
@@ -72,25 +79,31 @@ function attrValFrom(xml: string, tag: string, attr: string, from: number): [str
 }
 
 /** Extract an attribute value from within a known tag region [start, gtPos). */
-function attrInRange(xml: string, attr: string, start: number, end: number): string {
-	const search = attr + '="'
+function attrInRange(
+	xml: string,
+	attr: string,
+	start: number,
+	end: number
+): string {
+	const search = `${attr}="`
 	const aStart = xml.indexOf(search, start)
 	if (aStart === -1 || aStart >= end) return ''
 	const vStart = aStart + search.length
 	const vEnd = xml.indexOf('"', vStart)
-	return (vEnd === -1 || vEnd > end) ? '' : xml.substring(vStart, vEnd)
+	return vEnd === -1 || vEnd > end ? '' : xml.substring(vStart, vEnd)
 }
 
 /** Find a tag and return [tagStart, gtPos]. Returns [-1, -1] if not found. */
 function findTag(xml: string, tag: string, from: number): [number, number] {
-	const needle = '<' + tag
+	const needle = `<${tag}`
 	const nLen = needle.length
 	let open = from
 	while (true) {
 		open = xml.indexOf(needle, open)
 		if (open === -1) return [-1, -1]
 		const c = xml.charCodeAt(open + nLen)
-		if (c === 62 || c === 32 || c === 47 || c === 9 || c === 10 || c === 13) break
+		if (c === 62 || c === 32 || c === 47 || c === 9 || c === 10 || c === 13)
+			break
 		open += nLen
 	}
 	const gt = xml.indexOf('>', open)
@@ -117,7 +130,10 @@ function extractDataPairs(section: string): string {
 		if (ds === -1) break
 		const gt = section.indexOf('>', ds + 5)
 		if (gt === -1) break
-		if (section.charCodeAt(gt - 1) === 47) { pos = gt + 1; continue } // <Data ... />
+		if (section.charCodeAt(gt - 1) === 47) {
+			pos = gt + 1
+			continue
+		} // <Data ... />
 		const ce = section.indexOf('</Data>', gt + 1)
 		if (ce === -1) break
 		const value = section.substring(gt + 1, ce)
@@ -127,7 +143,7 @@ function extractDataPairs(section: string): string {
 				const nvs = ni + 6
 				const nve = section.indexOf('"', nvs)
 				if (nve !== -1 && nve < gt) {
-					pairs.push(section.substring(nvs, nve) + ': ' + decodeEntities(value))
+					pairs.push(`${section.substring(nvs, nve)}: ${decodeEntities(value)}`)
 				} else {
 					pairs.push(decodeEntities(value))
 				}
@@ -148,7 +164,8 @@ function extractLeafPairs(section: string): string {
 		const lt = section.indexOf('<', pos)
 		if (lt === -1) break
 		const nc = section.charCodeAt(lt + 1)
-		if (nc === 47 || nc === 33 || nc === 63) { // closing tag, comment, PI
+		if (nc === 47 || nc === 33 || nc === 63) {
+			// closing tag, comment, PI
 			const gt = section.indexOf('>', lt + 2)
 			pos = gt === -1 ? section.length : gt + 1
 			continue
@@ -157,21 +174,28 @@ function extractLeafPairs(section: string): string {
 		let ne = lt + 1
 		while (ne < section.length) {
 			const c = section.charCodeAt(ne)
-			if (c === 32 || c === 62 || c === 47 || c === 9 || c === 10 || c === 13) break
+			if (c === 32 || c === 62 || c === 47 || c === 9 || c === 10 || c === 13)
+				break
 			ne++
 		}
 		const tag = section.substring(lt + 1, ne)
 		const gt = section.indexOf('>', lt)
 		if (gt === -1) break
-		if (section.charCodeAt(gt - 1) === 47) { pos = gt + 1; continue } // self-closing
-		const closeTag = '</' + tag + '>'
+		if (section.charCodeAt(gt - 1) === 47) {
+			pos = gt + 1
+			continue
+		} // self-closing
+		const closeTag = `</${tag}>`
 		const closePos = section.indexOf(closeTag, gt + 1)
-		if (closePos === -1) { pos = gt + 1; continue }
+		if (closePos === -1) {
+			pos = gt + 1
+			continue
+		}
 		const content = section.substring(gt + 1, closePos)
 		// Only include leaf nodes (no child elements)
 		if (content.indexOf('<') === -1) {
 			const trimmed = content.trim()
-			if (trimmed) pairs.push(tag + ': ' + decodeEntities(trimmed))
+			if (trimmed) pairs.push(`${tag}: ${decodeEntities(trimmed)}`)
 		}
 		pos = gt + 1
 	}
@@ -195,11 +219,11 @@ export function parseEventXml(xmlString: string): {
 	relatedActivityId: string
 	eventData: string
 } {
-	if (!xmlString) return { ...EMPTY_RESULT }
+	if (!xmlString) return {...EMPTY_RESULT}
 
 	// Find <System> section once
 	const sysOpen = xmlString.indexOf('<System>')
-	if (sysOpen === -1) return { ...EMPTY_RESULT }
+	if (sysOpen === -1) return {...EMPTY_RESULT}
 	const sysClose = xmlString.indexOf('</System>', sysOpen)
 
 	// Single forward pass through System fields in document order:
@@ -222,7 +246,7 @@ export function parseEventXml(xmlString: string): {
 
 	// Level
 	;[val, pos] = tagTextFrom(xmlString, 'Level', pos)
-	const level = val ? parseInt(val, 10) || 0 : 0
+	const level = val ? Number.parseInt(val, 10) || 0 : 0
 
 	// Task
 	;[val, pos] = tagTextFrom(xmlString, 'Task', pos)
@@ -242,7 +266,12 @@ export function parseEventXml(xmlString: string): {
 	const [corrStart, corrGt] = findTag(xmlString, 'Correlation', pos)
 	if (corrStart !== -1) {
 		activityId = attrInRange(xmlString, 'ActivityID', corrStart, corrGt)
-		relatedActivityId = attrInRange(xmlString, 'RelatedActivityID', corrStart, corrGt)
+		relatedActivityId = attrInRange(
+			xmlString,
+			'RelatedActivityID',
+			corrStart,
+			corrGt
+		)
 		pos = corrGt + 1
 	}
 
@@ -255,7 +284,6 @@ export function parseEventXml(xmlString: string): {
 		threadId = attrInRange(xmlString, 'ThreadID', execStart, execGt)
 		pos = execGt + 1
 	}
-
 	// Channel
 	;[val, pos] = tagTextFrom(xmlString, 'Channel', pos)
 	const channel = decodeEntities(val)
@@ -272,7 +300,7 @@ export function parseEventXml(xmlString: string): {
 	let eventData = ''
 	const afterSystem = sysClose !== -1 ? sysClose + 9 : 0
 
-	const [edContent, edEnd] = tagTextFrom(xmlString, 'EventData', afterSystem)
+	const [edContent] = tagTextFrom(xmlString, 'EventData', afterSystem)
 	if (edContent) {
 		if (edContent.indexOf('<Data') !== -1) {
 			eventData = extractDataPairs(edContent)
@@ -302,9 +330,20 @@ export function parseEventXml(xmlString: string): {
 	}
 
 	return {
-		eventId, level, provider, computer, channel,
-		task, opcode, keywords, version,
-		processId, threadId, securityUserId,
-		activityId, relatedActivityId, eventData
+		eventId,
+		level,
+		provider,
+		computer,
+		channel,
+		task,
+		opcode,
+		keywords,
+		version,
+		processId,
+		threadId,
+		securityUserId,
+		activityId,
+		relatedActivityId,
+		eventData
 	}
 }

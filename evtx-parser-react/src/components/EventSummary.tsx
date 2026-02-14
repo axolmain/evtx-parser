@@ -24,7 +24,7 @@ const LEVEL_COLORS: Record<number, string> = {
 }
 
 export function EventSummary({records}: Properties) {
-	const t0 = performance.now()
+	const _t0 = performance.now()
 	const levelCounts: Record<number, number> = {}
 	let minDate = ''
 	let maxDate = ''
@@ -34,7 +34,6 @@ export function EventSummary({records}: Properties) {
 		if (!minDate || record.timestamp < minDate) minDate = record.timestamp
 		if (!maxDate || record.timestamp > maxDate) maxDate = record.timestamp
 	}
-	console.log(`[render] EventSummary: ${records.length} records in ${(performance.now() - t0).toFixed(1)}ms`)
 
 	const formatDate = (iso: string) => {
 		const date = new Date(iso)
