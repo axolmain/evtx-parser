@@ -11,19 +11,26 @@ public enum HeaderFlags : uint
     NoCrc32 = 0x4,
 }
 
-public record EvtxFileHeader(
-    byte[] Signature,           // Offset 0, 8 bytes
-    ulong FirstChunkNumber,     // Offset 8, 8 bytes
-    ulong LastChunkNumber,      // Offset 16, 8 bytes
-    ulong NextRecordIdentifier, // Offset 24, 8 bytes
-    uint HeaderSize,            // Offset 32, 4 bytes, value: 128
-    ushort MinorFormatVersion,  // Offset 36, 2 bytes
-    ushort MajorFormatVersion,  // Offset 38, 2 bytes
-    ushort HeaderBlockSize,     // Offset 40, 2 bytes, value: 4096
-    ushort NumberOfChunks,      // Offset 42, 2 bytes
-    HeaderFlags FileFlags,      // Offset 120, 4 bytes
-    uint Checksum               // Offset 124, 4 bytes, CRC32 of first 120 bytes
-)
+/// <summary>
+/// The file header occupies the first 4,096 bytes. It identifies the file as EVTX, tracks which chunks
+/// and record IDs are in use, and stores a CRC32 checksum of the first 120 bytes (0x00–0x77) for
+/// integrity validation. The Dirty flag indicates unclean shutdown; the Full flag indicates the log
+/// reached its maximum size.
+/// </summary>
+/// <param name="Signature">Offset 0, 8 bytes. Magic bytes "ElfFile\x00".</param>
+/// <param name="FirstChunkNumber">Offset 8, 8 bytes. Number of the oldest chunk in the file.</param>
+/// <param name="LastChunkNumber">Offset 16, 8 bytes. Number of the most recent chunk in the file.</param>
+/// <param name="NextRecordIdentifier">Offset 24, 8 bytes. Next event record identifier to be assigned.</param>
+/// <param name="HeaderSize">Offset 32, 4 bytes. Always 128.</param>
+/// <param name="MinorFormatVersion">Offset 36, 2 bytes. Minor format version (e.g. 1 for v3.1).</param>
+/// <param name="MajorFormatVersion">Offset 38, 2 bytes. Major format version (e.g. 3 for v3.1).</param>
+/// <param name="HeaderBlockSize">Offset 40, 2 bytes. Always 4096 (chunk data offset).</param>
+/// <param name="NumberOfChunks">Offset 42, 2 bytes. Number of chunks in the file.</param>
+/// <param name="FileFlags">Offset 120, 4 bytes. Dirty/Full/NoCrc32 flags.</param>
+/// <param name="Checksum">Offset 124, 4 bytes. CRC32 of the first 120 bytes of the header.</param>
+public record EvtxFileHeader(byte[] Signature, ulong FirstChunkNumber, ulong LastChunkNumber, 
+    ulong NextRecordIdentifier, uint HeaderSize, ushort MinorFormatVersion, ushort MajorFormatVersion, 
+    ushort HeaderBlockSize, ushort NumberOfChunks, HeaderFlags FileFlags, uint Checksum )
 {
 
     public static EvtxFileHeader ParseEvtxFileHeader(byte[] data)
@@ -33,6 +40,9 @@ public record EvtxFileHeader(
 
     private static EvtxFileHeader ParseBytes(ReadOnlySpan<byte> data)
     {
+        if (data.Length < 128)
+            throw new InvalidDataException("EVTX header too short");
+
         if (!data[..8].SequenceEqual("ElfFile\0"u8))
             throw new InvalidDataException("Invalid EVTX signature");
 
