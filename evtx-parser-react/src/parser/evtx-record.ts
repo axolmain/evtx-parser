@@ -1,12 +1,6 @@
 import {BinXmlParser} from './binxml'
-import {HEX} from './constants'
 import {filetimeToIso} from './helpers'
-import type {
-	ChunkHeader,
-	EvtxRecord,
-	ParsedEventRecord,
-	TemplateStats
-} from './types'
+import type {ChunkHeader, EvtxRecord, ParsedEventRecord, TemplateStats} from './types'
 import {parseEventXml} from './xml-helper'
 
 const LEVEL_NAMES: Record<number, string> = {

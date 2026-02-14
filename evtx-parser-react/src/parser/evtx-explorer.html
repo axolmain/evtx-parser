@@ -83,6 +83,186 @@
         .back-btn { margin-top: 40px; background: none; border: 1px solid #2a3040; color: #6b7a90; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: 13px; transition: all 0.15s; }
         .back-btn:hover { border-color: #5b9bd5; color: #5b9bd5; }
 
+        /* Visual map button */
+        .map-btn {
+            position: fixed;
+            top: 16px;
+            right: 24px;
+            z-index: 100;
+            background: #1a2030;
+            border: 1px solid #2a3040;
+            color: #6b7a90;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .map-btn:hover {
+            border-color: #5b9bd5;
+            color: #5b9bd5;
+        }
+
+        .map-btn svg {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+        }
+
+        /* Visual map overlay */
+        .vmap-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            background: rgba(10, 14, 22, 0.92);
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s;
+        }
+
+        .vmap-overlay.open {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .vmap-close {
+            position: absolute;
+            top: 20px;
+            right: 28px;
+            background: none;
+            border: 1px solid #2a3040;
+            color: #6b7a90;
+            width: 36px;
+            height: 36px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
+        }
+
+        .vmap-close:hover {
+            border-color: #e8a44a;
+            color: #e8a44a;
+        }
+
+        .vmap-back {
+            position: absolute;
+            top: 20px;
+            left: 28px;
+            background: none;
+            border: 1px solid #2a3040;
+            color: #6b7a90;
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            transition: all 0.15s;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .vmap-back.visible {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .vmap-back:hover {
+            border-color: #5b9bd5;
+            color: #5b9bd5;
+        }
+
+        .vmap-doc {
+            width: 320px;
+            max-height: 80vh;
+            background: #151c2c;
+            border: 2px solid #2a3040;
+            border-radius: 12px;
+            padding: 0;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        .vmap-title {
+            padding: 16px 20px 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: #6b7a90;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            font-weight: 700;
+            border-bottom: 1px solid #1e2736;
+        }
+
+        .vmap-body {
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .vmap-section {
+            border: 2px solid var(--vc);
+            border-radius: 8px;
+            padding: 16px 18px;
+            cursor: pointer;
+            background: var(--vbg);
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .vmap-section:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 16px var(--vbg);
+        }
+
+        .vmap-section.static {
+            cursor: default;
+            opacity: 0.5;
+        }
+
+        .vmap-section.static:hover {
+            transform: none;
+            box-shadow: none;
+        }
+
+        .vmap-section-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            font-size: 12px;
+            color: var(--vc);
+            letter-spacing: 0.04em;
+        }
+
+        .vmap-section-size {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: #6b7a90;
+            margin-top: 4px;
+        }
+
+        .vmap-section-hint {
+            font-size: 11px;
+            color: #4a5568;
+            margin-top: 6px;
+        }
+
         @media (max-width: 640px) {
             .container { padding: 0 16px 48px; }
             .header-bar { padding: 14px 16px; }
@@ -99,6 +279,19 @@
         <span class="header-title">EVTX Explorer</span>
         <span class="header-sub">Interactive Structure Reference</span>
     </div>
+</div>
+
+<button class="map-btn" onclick="toggleMap()">
+    <svg viewBox="0 0 24 24">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM6 20V4h5v7h7v9H6z"/>
+    </svg>
+    Visual Map
+</button>
+
+<div class="vmap-overlay" id="vmapOverlay">
+    <button class="vmap-close" onclick="toggleMap()">&times;</button>
+    <button class="vmap-back" id="vmapBack" onclick="vmapGoBack()">&larr; Back</button>
+    <div class="vmap-doc" id="vmapDoc"></div>
 </div>
 
 <div class="container" id="app"></div>
@@ -192,7 +385,16 @@
                 { offset: "0x0080", size: 256, name: "Common String Offsets", value: "64 \u00d7 uint32", note: "Offset table for 64 cached string names within this chunk" },
                 { offset: "0x0180", size: 128, name: "Template Pointers", value: "32 \u00d7 uint32", note: "Offset table for 32 cached template definitions within this chunk" }
             ],
-            blocks: []
+            blocks: [
+                {
+                    id: "templateTable",
+                    label: "TEMPLATE POINTER TABLE",
+                    size: "128 bytes",
+                    color: "#1abc9c",
+                    desc: "Deep dive into how the 32-entry chained hash table indexes template definitions within the chunk.",
+                    nav: "templateTable"
+                }
+            ]
         },
         eventRecord: {
             title: "Event Record",
@@ -268,6 +470,78 @@
             },
             blocks: []
         },
+        templateTable: {
+            title: "Template Pointer Table",
+            subtitle: "128 bytes at chunk offset 0x0180 \u2014 Chained Hash Table",
+            parent: "chunkHeader",
+            description: "The template pointer table is a 32-entry chained hash table stored in the chunk header. Each entry is a uint32 offset pointing to the first template definition in that hash bucket. Template definitions are scattered throughout the chunk's data area (typically embedded in the first record that uses them). Each definition's first 4 bytes are a 'next' pointer forming a linked list within the same bucket, allowing multiple templates to share a hash slot. To preload all templates before parsing records, you must follow each chain to its end (next == 0). The hash function is: template_offset % 32.",
+            fields: [
+                {
+                    offset: "0x0180",
+                    size: 4,
+                    name: "Bucket [0]",
+                    value: "uint32",
+                    note: "Offset to first template definition in bucket 0 (0 = empty)"
+                },
+                {
+                    offset: "0x0184",
+                    size: 4,
+                    name: "Bucket [1]",
+                    value: "uint32",
+                    note: "Offset to first template definition in bucket 1 (0 = empty)"
+                },
+                {
+                    offset: "...",
+                    size: "...",
+                    name: "Bucket [2\u201331]",
+                    value: "uint32 each",
+                    note: "Remaining 30 buckets, same structure"
+                }
+            ],
+            extra: {
+                title: "Template Definition Layout (at each offset)",
+                fields: [
+                    {
+                        offset: "0x00",
+                        size: 4,
+                        name: "Next Template Offset",
+                        value: "uint32",
+                        note: "Chunk-relative offset to next definition in this hash bucket (0 = end of chain)"
+                    },
+                    {
+                        offset: "0x04",
+                        size: 16,
+                        name: "Template GUID",
+                        value: "GUID",
+                        note: "Unique identifier for this template definition"
+                    },
+                    {
+                        offset: "0x14",
+                        size: 4,
+                        name: "Data Size",
+                        value: "uint32",
+                        note: "Size of the template body (BinXml element tree) in bytes"
+                    },
+                    {
+                        offset: "0x18",
+                        size: "?",
+                        name: "Template Body",
+                        value: "BinXml",
+                        note: "The XML skeleton with substitution placeholders"
+                    }
+                ]
+            },
+            blocks: [
+                {
+                    id: "templateInst",
+                    label: "TEMPLATE INSTANCE (Token 0x0C)",
+                    size: "Variable",
+                    color: "#3498db",
+                    desc: "How records reference and instantiate these cached template definitions.",
+                    nav: "templateInstance"
+                }
+            ]
+        },
         templateInstance: {
             title: "Template Instance",
             subtitle: "Variable length \u2014 Token 0x0C",
@@ -280,7 +554,16 @@
                 { offset: "...", size: "?", name: "Value Descriptors", value: "N \u00d7 4 bytes", note: "Array of (size: uint16, type: uint8, padding: uint8) descriptors" },
                 { offset: "...", size: "?", name: "Value Data", value: "variable", note: "Concatenated raw value data in descriptor order" }
             ],
-            blocks: []
+            blocks: [
+                {
+                    id: "templateTable",
+                    label: "TEMPLATE POINTER TABLE",
+                    size: "128 bytes",
+                    color: "#1abc9c",
+                    desc: "The chunk header's hash table where template definitions are indexed and chained.",
+                    nav: "templateTable"
+                }
+            ]
         },
         substitution: {
             title: "Substitution",
@@ -446,6 +729,192 @@
     }
 
     render();
+
+    // ── Visual Map ──
+    const VMAP_LEVELS = {
+        file: {
+            title: "EVTX File",
+            sections: [
+                {
+                    id: "fileHeader",
+                    label: "FILE HEADER",
+                    size: "4,096 bytes",
+                    color: "#e8a44a",
+                    flex: 1,
+                    nav: null,
+                    viewNav: "fileHeader"
+                },
+                {id: "chunks", label: "CHUNKS", size: "65,536 bytes \u00d7 N", color: "#5b9bd5", flex: 5, nav: "chunk"},
+                {
+                    id: "trailing",
+                    label: "TRAILING SPACE",
+                    size: "Variable",
+                    color: "#6b7280",
+                    flex: 0.5,
+                    nav: null,
+                    static: true
+                }
+            ]
+        },
+        chunk: {
+            title: "Chunk (64 KB)",
+            sections: [
+                {
+                    id: "chunkHeader",
+                    label: "CHUNK HEADER",
+                    size: "512 bytes",
+                    color: "#70ad47",
+                    flex: 1,
+                    nav: null,
+                    viewNav: "chunkHeader"
+                },
+                {id: "records", label: "EVENT RECORDS", size: "Variable", color: "#ed7d31", flex: 5, nav: "record"},
+                {
+                    id: "unused",
+                    label: "UNUSED SPACE",
+                    size: "Variable",
+                    color: "#6b7280",
+                    flex: 1,
+                    nav: null,
+                    static: true
+                }
+            ]
+        },
+        record: {
+            title: "Event Record",
+            sections: [
+                {
+                    id: "sig",
+                    label: "SIGNATURE",
+                    size: "4 bytes \\x2a\\x2a\\x00\\x00",
+                    color: "#c44e52",
+                    flex: 0.5,
+                    nav: null,
+                    static: true
+                },
+                {
+                    id: "header",
+                    label: "RECORD HEADER",
+                    size: "24 bytes",
+                    color: "#e8a44a",
+                    flex: 1,
+                    nav: null,
+                    viewNav: "eventRecord"
+                },
+                {id: "binxml", label: "BINARY XML", size: "Variable", color: "#9b59b6", flex: 5, nav: "binxml"},
+                {
+                    id: "sizecopy",
+                    label: "SIZE COPY",
+                    size: "4 bytes",
+                    color: "#6b7280",
+                    flex: 0.3,
+                    nav: null,
+                    static: true
+                }
+            ]
+        },
+        binxml: {
+            title: "Binary XML Document",
+            sections: [
+                {
+                    id: "fragment",
+                    label: "FRAGMENT HEADER",
+                    size: "4 bytes (0x0F)",
+                    color: "#9b59b6",
+                    flex: 0.5,
+                    nav: null,
+                    viewNav: "fragment"
+                },
+                {
+                    id: "template",
+                    label: "TEMPLATE INSTANCE",
+                    size: "Variable (0x0C)",
+                    color: "#3498db",
+                    flex: 3,
+                    nav: null,
+                    viewNav: "templateInstance"
+                },
+                {
+                    id: "elements",
+                    label: "ELEMENTS",
+                    size: "Variable",
+                    color: "#e74c3c",
+                    flex: 3,
+                    nav: null,
+                    viewNav: "element"
+                },
+                {
+                    id: "substitutions",
+                    label: "SUBSTITUTIONS",
+                    size: "Variable",
+                    color: "#2ecc71",
+                    flex: 2,
+                    nav: null,
+                    viewNav: "substitution"
+                }
+            ]
+        }
+    };
+
+    let vmapStack = ["file"];
+
+    function toggleMap() {
+        const overlay = document.getElementById("vmapOverlay");
+        overlay.classList.toggle("open");
+        if (overlay.classList.contains("open")) {
+            vmapStack = ["file"];
+            renderVmap();
+        }
+    }
+
+    function vmapGoBack() {
+        if (vmapStack.length > 1) {
+            vmapStack.pop();
+            renderVmap();
+        }
+    }
+
+    function vmapDrillDown(levelId) {
+        if (VMAP_LEVELS[levelId]) {
+            vmapStack.push(levelId);
+            renderVmap();
+        }
+    }
+
+    function vmapNavigateAndClose(viewId) {
+        toggleMap();
+        navigate(viewId);
+    }
+
+    function renderVmap() {
+        const levelId = vmapStack[vmapStack.length - 1];
+        const level = VMAP_LEVELS[levelId];
+        const doc = document.getElementById("vmapDoc");
+        const backBtn = document.getElementById("vmapBack");
+
+        backBtn.classList.toggle("visible", vmapStack.length > 1);
+
+        let html = `<div class="vmap-title">${esc(level.title)}</div><div class="vmap-body">`;
+
+        for (const s of level.sections) {
+            const bg = hexBg(s.color, 0.08);
+            const isStatic = s.static && !s.viewNav;
+            const onclick = s.nav ? `onclick="vmapDrillDown('${s.nav}')"` :
+                s.viewNav ? `onclick="vmapNavigateAndClose('${s.viewNav}')"` : "";
+
+            html += `<div class="vmap-section${isStatic ? ' static' : ''}" style="--vc:${s.color};--vbg:${bg};flex:${s.flex}" ${onclick}
+                onmouseenter="this.style.background='${hexBg(s.color, 0.18)}'"
+                onmouseleave="this.style.background='${bg}'">
+                <div class="vmap-section-label">${esc(s.label)}</div>
+                <div class="vmap-section-size">${esc(s.size)}</div>
+                ${s.nav ? '<div class="vmap-section-hint">Click to drill down \u2192</div>' : ''}
+                ${s.viewNav && !s.nav ? '<div class="vmap-section-hint">Click for details \u2192</div>' : ''}
+            </div>`;
+        }
+
+        html += `</div>`;
+        doc.innerHTML = html;
+    }
 </script>
 </body>
 </html>
