@@ -33,10 +33,7 @@ public record EvtxFileHeader(byte[] Signature, ulong FirstChunkNumber, ulong Las
     ushort HeaderBlockSize, ushort NumberOfChunks, HeaderFlags FileFlags, uint Checksum )
 {
 
-    public static EvtxFileHeader ParseEvtxFileHeader(byte[] data)
-    {
-        return ParseBytes(data);
-    }
+    public static EvtxFileHeader ParseEvtxFileHeader(byte[] data) => ParseBytes(data);
 
     private static EvtxFileHeader ParseBytes(ReadOnlySpan<byte> data)
     {
