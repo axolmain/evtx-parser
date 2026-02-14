@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="EvtxParserWasm.Tests/EvtxParserWasm.Tests.csproj" />
+  <Project Path="EvtxParserWasm/EvtxParserWasm.csproj" />
+</Solution>
