@@ -13,11 +13,11 @@ public class EvtxChunkHeaderTests(ITestOutputHelper testOutputHelper)
     [Fact]
     public void ParsesFirstChunkOfSecurityEvtx()
     {
-        var data = File.ReadAllBytes(Path.Combine(TestDataDir, "security.evtx"));
-        var chunkData = data[FileHeaderSize..(FileHeaderSize + ChunkSize)];
+        byte[] data = File.ReadAllBytes(Path.Combine(TestDataDir, "security.evtx"));
+        byte[] chunkData = data[FileHeaderSize..(FileHeaderSize + ChunkSize)];
 
-        var sw = Stopwatch.StartNew();
-        var chunk = EvtxChunkHeader.ParseEvtxChunkHeader(chunkData);
+        Stopwatch sw = Stopwatch.StartNew();
+        EvtxChunkHeader chunk = EvtxChunkHeader.ParseEvtxChunkHeader(chunkData);
         sw.Stop();
 
         Assert.Equal(128u, chunk.HeaderSize);
@@ -37,33 +37,33 @@ public class EvtxChunkHeaderTests(ITestOutputHelper testOutputHelper)
     [Fact]
     public void ThrowsOnTruncatedData()
     {
-        var data = new byte[256];
+        byte[] data = new byte[256];
         Assert.Throws<InvalidDataException>(() => EvtxChunkHeader.ParseEvtxChunkHeader(data));
     }
 
     [Fact]
     public void ThrowsOnBadSignature()
     {
-        var data = new byte[512];
+        byte[] data = new byte[512];
         Assert.Throws<InvalidDataException>(() => EvtxChunkHeader.ParseEvtxChunkHeader(data));
     }
 
     [Fact]
     public void ParsesAllChunksInSecurityEvtx()
     {
-        var data = File.ReadAllBytes(Path.Combine(TestDataDir, "security.evtx"));
-        var fileHeader = EvtxFileHeader.ParseEvtxFileHeader(data);
-        var sw = new Stopwatch();
+        byte[] data = File.ReadAllBytes(Path.Combine(TestDataDir, "security.evtx"));
+        EvtxFileHeader fileHeader = EvtxFileHeader.ParseEvtxFileHeader(data);
+        Stopwatch sw = new Stopwatch();
 
         testOutputHelper.WriteLine($"Parsing {fileHeader.NumberOfChunks} chunks:");
 
         for (int i = 0; i < fileHeader.NumberOfChunks; i++)
         {
             int offset = FileHeaderSize + i * ChunkSize;
-            var chunkData = data[offset..(offset + ChunkSize)];
+            byte[] chunkData = data[offset..(offset + ChunkSize)];
 
             sw.Restart();
-            var chunk = EvtxChunkHeader.ParseEvtxChunkHeader(chunkData);
+            EvtxChunkHeader chunk = EvtxChunkHeader.ParseEvtxChunkHeader(chunkData);
             sw.Stop();
 
             testOutputHelper.WriteLine(

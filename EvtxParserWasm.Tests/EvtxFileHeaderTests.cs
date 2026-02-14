@@ -10,10 +10,10 @@ public class EvtxFileHeaderTests(ITestOutputHelper testOutputHelper)
     [Fact]
     public void ParsesSecurityEvtxHeader()
     {
-        var data = File.ReadAllBytes(Path.Combine(TestDataDir, "security.evtx"));
+        byte[] data = File.ReadAllBytes(Path.Combine(TestDataDir, "security.evtx"));
 
-        var sw = Stopwatch.StartNew();
-        var header = EvtxFileHeader.ParseEvtxFileHeader(data);
+        Stopwatch sw = Stopwatch.StartNew();
+        EvtxFileHeader header = EvtxFileHeader.ParseEvtxFileHeader(data);
         sw.Stop();
 
         Assert.Equal(128u, header.HeaderSize);
@@ -31,10 +31,10 @@ public class EvtxFileHeaderTests(ITestOutputHelper testOutputHelper)
     [Fact]
     public void ParsesDirtyFlaggedFile()
     {
-        var data = File.ReadAllBytes(Path.Combine(TestDataDir, "2-system-Security-dirty.evtx"));
+        byte[] data = File.ReadAllBytes(Path.Combine(TestDataDir, "2-system-Security-dirty.evtx"));
 
-        var sw = Stopwatch.StartNew();
-        var header = EvtxFileHeader.ParseEvtxFileHeader(data);
+        Stopwatch sw = Stopwatch.StartNew();
+        EvtxFileHeader header = EvtxFileHeader.ParseEvtxFileHeader(data);
         sw.Stop();
 
         Assert.True(header.FileFlags.HasFlag(HeaderFlags.Dirty));
@@ -46,23 +46,23 @@ public class EvtxFileHeaderTests(ITestOutputHelper testOutputHelper)
     [Fact]
     public void ThrowsOnTruncatedData()
     {
-        var data = new byte[64];
+        byte[] data = new byte[64];
         Assert.Throws<InvalidDataException>(() => EvtxFileHeader.ParseEvtxFileHeader(data));
     }
 
     [Fact]
     public void ThrowsOnBadSignature()
     {
-        var data = new byte[4096];
+        byte[] data = new byte[4096];
         Assert.Throws<InvalidDataException>(() => EvtxFileHeader.ParseEvtxFileHeader(data));
     }
 
     [Fact]
     public void ParsesNoCrc32FlaggedFile()
     {
-        var data = File.ReadAllBytes(Path.Combine(TestDataDir, "Application_no_crc32.evtx"));
+        byte[] data = File.ReadAllBytes(Path.Combine(TestDataDir, "Application_no_crc32.evtx"));
 
-        var header = EvtxFileHeader.ParseEvtxFileHeader(data);
+        EvtxFileHeader header = EvtxFileHeader.ParseEvtxFileHeader(data);
 
         Assert.True(header.FileFlags.HasFlag(HeaderFlags.NoCrc32));
         testOutputHelper.WriteLine($"[Application_no_crc32.evtx] Flags: {header.FileFlags}");
@@ -72,10 +72,10 @@ public class EvtxFileHeaderTests(ITestOutputHelper testOutputHelper)
     public void ParsesMinimumValidHeader()
     {
         // Build a bare 128-byte buffer with just a valid signature
-        var data = new byte[128];
+        byte[] data = new byte[128];
         "ElfFile\0"u8.CopyTo(data);
 
-        var header = EvtxFileHeader.ParseEvtxFileHeader(data);
+        EvtxFileHeader header = EvtxFileHeader.ParseEvtxFileHeader(data);
 
         Assert.Equal(0u, header.HeaderSize);
         Assert.Equal((ushort)0, header.NumberOfChunks);
@@ -85,21 +85,21 @@ public class EvtxFileHeaderTests(ITestOutputHelper testOutputHelper)
     [Fact]
     public void ParsesAllTestFiles()
     {
-        var evtxFiles = Directory.GetFiles(TestDataDir, "*.evtx");
+        string[] evtxFiles = Directory.GetFiles(TestDataDir, "*.evtx");
         Assert.True(evtxFiles.Length > 0, "No test .evtx files found");
 
-        var sw = new Stopwatch();
+        Stopwatch sw = new Stopwatch();
         testOutputHelper.WriteLine($"Parsing headers for {evtxFiles.Length} files:");
 
-        foreach (var file in evtxFiles)
+        foreach (string file in evtxFiles)
         {
-            var data = File.ReadAllBytes(file);
+            byte[] data = File.ReadAllBytes(file);
 
             sw.Restart();
-            var header = EvtxFileHeader.ParseEvtxFileHeader(data);
+            EvtxFileHeader header = EvtxFileHeader.ParseEvtxFileHeader(data);
             sw.Stop();
 
-            var name = Path.GetFileName(file);
+            string name = Path.GetFileName(file);
             testOutputHelper.WriteLine(
                 $"  [{name}] {sw.Elapsed.TotalMicroseconds,8:F1}µs | v{header.MajorFormatVersion}.{header.MinorFormatVersion} | {header.NumberOfChunks} chunks | {header.FileFlags}");
         }

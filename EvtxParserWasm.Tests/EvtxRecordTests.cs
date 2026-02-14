@@ -14,16 +14,16 @@ public class EvtxRecordTests(ITestOutputHelper testOutputHelper)
     [Fact]
     public void ParsesFirstRecordOfSecurityEvtx()
     {
-        var data = File.ReadAllBytes(Path.Combine(TestDataDir, "security.evtx"));
-        var chunkStart = FileHeaderSize;
-        var chunkData = data[chunkStart..(chunkStart + ChunkSize)];
-        var chunk = EvtxChunkHeader.ParseEvtxChunkHeader(chunkData);
+        byte[] data = File.ReadAllBytes(Path.Combine(TestDataDir, "security.evtx"));
+        int chunkStart = FileHeaderSize;
+        byte[] chunkData = data[chunkStart..(chunkStart + ChunkSize)];
+        EvtxChunkHeader chunk = EvtxChunkHeader.ParseEvtxChunkHeader(chunkData);
 
         // First record starts right after chunk header (offset 512 within the chunk)
-        var recordData = chunkData[ChunkHeaderSize..];
+        byte[] recordData = chunkData[ChunkHeaderSize..];
 
-        var sw = Stopwatch.StartNew();
-        var record = EvtxRecord.ParseEvtxRecord(recordData);
+        Stopwatch sw = Stopwatch.StartNew();
+        EvtxRecord record = EvtxRecord.ParseEvtxRecord(recordData);
         sw.Stop();
 
         Assert.True(record.Size > 28, "Record size must be larger than the fixed header");
@@ -41,27 +41,27 @@ public class EvtxRecordTests(ITestOutputHelper testOutputHelper)
     [Fact]
     public void ThrowsOnBadSignature()
     {
-        var data = new byte[64];
+        byte[] data = new byte[64];
         Assert.Throws<InvalidDataException>(() => EvtxRecord.ParseEvtxRecord(data));
     }
 
     [Fact]
     public void SizeAndSizeCopyMatch()
     {
-        var data = File.ReadAllBytes(Path.Combine(TestDataDir, "security.evtx"));
-        var chunkData = data[FileHeaderSize..(FileHeaderSize + ChunkSize)];
+        byte[] data = File.ReadAllBytes(Path.Combine(TestDataDir, "security.evtx"));
+        byte[] chunkData = data[FileHeaderSize..(FileHeaderSize + ChunkSize)];
 
-        var offset = ChunkHeaderSize;
-        var count = 0;
+        int offset = ChunkHeaderSize;
+        int count = 0;
 
         while (offset < ChunkSize - 28)
         {
-            var recordSlice = chunkData[offset..];
+            byte[] recordSlice = chunkData[offset..];
             // Check for record magic before parsing
             if (recordSlice[0] != 0x2a || recordSlice[1] != 0x2a || recordSlice[2] != 0x00 || recordSlice[3] != 0x00)
                 break;
 
-            var record = EvtxRecord.ParseEvtxRecord(recordSlice);
+            EvtxRecord record = EvtxRecord.ParseEvtxRecord(recordSlice);
             Assert.Equal(record.Size, record.SizeCopy);
             offset += (int)record.Size;
             count++;
@@ -74,22 +74,22 @@ public class EvtxRecordTests(ITestOutputHelper testOutputHelper)
     [Fact]
     public void ParsesAllRecordsInFirstChunk()
     {
-        var data = File.ReadAllBytes(Path.Combine(TestDataDir, "security.evtx"));
-        var chunkData = data[FileHeaderSize..(FileHeaderSize + ChunkSize)];
-        var chunk = EvtxChunkHeader.ParseEvtxChunkHeader(chunkData);
+        byte[] data = File.ReadAllBytes(Path.Combine(TestDataDir, "security.evtx"));
+        byte[] chunkData = data[FileHeaderSize..(FileHeaderSize + ChunkSize)];
+        EvtxChunkHeader chunk = EvtxChunkHeader.ParseEvtxChunkHeader(chunkData);
 
-        var sw = new Stopwatch();
-        var offset = ChunkHeaderSize;
-        var records = new List<EvtxRecord>();
+        Stopwatch sw = new Stopwatch();
+        int offset = ChunkHeaderSize;
+        List<EvtxRecord> records = new List<EvtxRecord>();
 
         while (offset < ChunkSize - 28)
         {
-            var recordSlice = chunkData[offset..];
+            byte[] recordSlice = chunkData[offset..];
             if (recordSlice[0] != 0x2a || recordSlice[1] != 0x2a || recordSlice[2] != 0x00 || recordSlice[3] != 0x00)
                 break;
 
             sw.Start();
-            var record = EvtxRecord.ParseEvtxRecord(recordSlice);
+            EvtxRecord record = EvtxRecord.ParseEvtxRecord(recordSlice);
             sw.Stop();
 
             records.Add(record);
