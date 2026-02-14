@@ -1,13 +1,13 @@
 export {BinXmlParser, parseBinXmlDocument} from './binxml'
+export {parseFileHeader} from './evtx-file-header'
+export {parseRecord, parseEventRecord} from './evtx-record'
 export {
-	discoverChunkOffsets,
 	parseChunk,
-	parseEventRecord,
-	parseEvtx,
-	parseFileHeader,
-	preloadTemplateDefinitions,
-	validateChunk
-} from './evtx'
+	parseChunkHeader,
+	validateChunk,
+	preloadTemplateDefinitions
+} from './evtx-chunk'
+export {discoverChunkOffsets, parseEvtx} from './evtx-parser'
 export {formatChunkHeaderComment, formatRecordComment} from './format'
 export {formatGuid, hex32} from './helpers'
 export type {
