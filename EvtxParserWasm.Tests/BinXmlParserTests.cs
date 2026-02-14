@@ -1,0 +1,114 @@
+using System.Diagnostics;
+
+namespace EvtxParserWasm.Tests;
+
+public class BinXmlParserTests(ITestOutputHelper testOutputHelper)
+{
+    private static readonly string TestDataDir = Path.GetFullPath(
+        Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "test", "data"));
+
+    [Fact]
+    public void FirstRecordStartsWithEventXmlns()
+    {
+        byte[] data = File.ReadAllBytes(Path.Combine(TestDataDir, "security.evtx"));
+        EvtxParser parser = EvtxParser.Parse(data);
+
+        Assert.True(parser.Chunks.Count > 0);
+        Assert.True(parser.Chunks[0].ParsedXml.Length > 0);
+
+        string xml = parser.Chunks[0].ParsedXml[0];
+        testOutputHelper.WriteLine($"First record XML ({xml.Length} chars):");
+        testOutputHelper.WriteLine(xml.Length > 500 ? xml[..500] + "..." : xml);
+
+        Assert.StartsWith("<Event xmlns=", xml);
+    }
+
+    [Fact]
+    public void AllRecordsNonEmpty()
+    {
+        byte[] data = File.ReadAllBytes(Path.Combine(TestDataDir, "security.evtx"));
+        EvtxParser parser = EvtxParser.Parse(data);
+
+        int totalRecords = 0;
+        foreach (EvtxChunk chunk in parser.Chunks)
+        {
+            Assert.Equal(chunk.Records.Count, chunk.ParsedXml.Length);
+            for (int i = 0; i < chunk.ParsedXml.Length; i++)
+            {
+                Assert.False(string.IsNullOrEmpty(chunk.ParsedXml[i]),
+                    $"Record {chunk.Records[i].EventRecordId} produced empty XML");
+                totalRecords++;
+            }
+        }
+
+        testOutputHelper.WriteLine($"All {totalRecords} records produced non-empty XML");
+    }
+
+    [Fact]
+    public void ParsesAllTestFilesWithoutExceptions()
+    {
+        string[] evtxFiles = Directory.GetFiles(TestDataDir, "*.evtx");
+        Stopwatch sw = new Stopwatch();
+
+        testOutputHelper.WriteLine($"BinXml parse of {evtxFiles.Length} files:");
+
+        foreach (string file in evtxFiles)
+        {
+            byte[] data = File.ReadAllBytes(file);
+            string name = Path.GetFileName(file);
+
+            sw.Restart();
+            EvtxParser parser = EvtxParser.Parse(data);
+            sw.Stop();
+
+            int xmlCount = 0;
+            foreach (EvtxChunk chunk in parser.Chunks)
+                xmlCount += chunk.ParsedXml.Length;
+
+            testOutputHelper.WriteLine(
+                $"  [{name}] {sw.Elapsed.TotalMilliseconds,8:F2}ms | {parser.TotalRecords} records | {xmlCount} XML");
+        }
+    }
+
+    [Fact]
+    public void BigSamplePerformance()
+    {
+        string path = Path.Combine(TestDataDir, "security_big_sample.evtx");
+        if (!File.Exists(path)) return;
+
+        byte[] data = File.ReadAllBytes(path);
+
+        Stopwatch sw = Stopwatch.StartNew();
+        EvtxParser parser = EvtxParser.Parse(data);
+        sw.Stop();
+
+        int xmlCount = 0;
+        foreach (EvtxChunk chunk in parser.Chunks)
+            xmlCount += chunk.ParsedXml.Length;
+
+        testOutputHelper.WriteLine(
+            $"[security_big_sample.evtx] Full parse + BinXml in {sw.Elapsed.TotalMilliseconds:F2}ms");
+        testOutputHelper.WriteLine($"  Chunks: {parser.Chunks.Count}, Records: {parser.TotalRecords}, XML: {xmlCount}");
+        testOutputHelper.WriteLine($"  Avg: {sw.Elapsed.TotalMicroseconds / parser.TotalRecords:F2}µs/record");
+    }
+
+    [Fact]
+    public void SampleXmlOutputForInspection()
+    {
+        byte[] data = File.ReadAllBytes(Path.Combine(TestDataDir, "security.evtx"));
+        EvtxParser parser = EvtxParser.Parse(data);
+
+        testOutputHelper.WriteLine("=== First 5 records XML ===");
+        int count = 0;
+        foreach (EvtxChunk chunk in parser.Chunks)
+        {
+            for (int i = 0; i < chunk.ParsedXml.Length && count < 5; i++, count++)
+            {
+                testOutputHelper.WriteLine($"\n--- Record {chunk.Records[i].EventRecordId} ---");
+                testOutputHelper.WriteLine(chunk.ParsedXml[i]);
+            }
+
+            if (count >= 5) break;
+        }
+    }
+}

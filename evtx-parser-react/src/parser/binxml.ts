@@ -1,912 +1,389 @@
 import {HEX, TOKEN, VALUE_TYPE} from './constants'
 import {filetimeLoHiToIso, formatGuid, hex32, tokenName, xmlEscape} from './helpers'
-import type {ChunkHeader, CompiledTemplate, ParsePosition, SubstitutionValue, TemplateStats} from './types'
+import type {ChunkHeader, ParsePosition, SubstitutionValue, TemplateStats} from './types'
 
-// Shared empty bytes — reused for all zero-size substitution values
 const EMPTY_BYTES = new Uint8Array(0)
 
-interface CompileBuilder {
-	parts: string[]
-	subIds: number[]
-	isOptional: boolean[]
-	bail: boolean
-}
-
 export class BinXmlParser {
-	// Cached decoders — shared across ALL instances, never re-allocated
 	static utf16 = new TextDecoder('utf-16le')
 	static ascii = new TextDecoder('ascii')
 
-	// Instance fields — set once per chunk, constant during parse
 	chunkDv: DataView
 	chunkHeader: ChunkHeader | null
 	tplStats: TemplateStats
-	constructor(
-		chunkDv: DataView,
-		chunkHeader: ChunkHeader | null,
-		tplStats: TemplateStats
-	) {
+
+	constructor(chunkDv: DataView, chunkHeader: ChunkHeader | null, tplStats: TemplateStats) {
 		this.chunkDv = chunkDv
 		this.chunkHeader = chunkHeader
 		this.tplStats = tplStats
 	}
 
-	private readName(chunkRelOffset: number): string {
-		const numChars = this.chunkDv.getUint16(chunkRelOffset + 6, true)
-		const strBytes = new Uint8Array(
-			this.chunkDv.buffer,
-			this.chunkDv.byteOffset + chunkRelOffset + 8,
-			numChars * 2
-		)
-		return BinXmlParser.utf16.decode(strBytes)
+	private readName(off: number): string {
+		const n = this.chunkDv.getUint16(off + 6, true)
+		return BinXmlParser.utf16.decode(new Uint8Array(this.chunkDv.buffer, this.chunkDv.byteOffset + off + 8, n * 2))
 	}
 
-	// Uses this.chunkDv with bias computed from bytes.byteOffset — no local DataView needed
-	private readUnicodeTextString(
-		bytes: Uint8Array,
-		pos: ParsePosition,
-		dvBias: number
-	): string {
-		const numChars = this.chunkDv.getUint16(dvBias + pos.offset, true)
+	private readUtf16(bytes: Uint8Array, pos: ParsePosition, bias: number): string {
+		const n = this.chunkDv.getUint16(bias + pos.offset, true)
 		pos.offset += 2
-		const strBytes = new Uint8Array(
-			bytes.buffer,
-			bytes.byteOffset + pos.offset,
-			numChars * 2
-		)
-		pos.offset += numChars * 2
-		return BinXmlParser.utf16.decode(strBytes)
+		const s = BinXmlParser.utf16.decode(new Uint8Array(bytes.buffer, bytes.byteOffset + pos.offset, n * 2))
+		pos.offset += n * 2
+		return s
 	}
 
-	private renderSubstitutionValue(
-		valueBytes: Uint8Array,
-		valueType: number
-	): string {
-		if (valueBytes.length === 0) return ''
+	private toHex(bytes: Uint8Array): string {
+		let h = ''
+		for (let i = 0; i < bytes.length; i++) h += HEX[bytes[i]!]!
+		return h
+	}
 
-		// Array flag: bit 0x80 means array of base type
-		if (valueType & 0x80) {
-			const baseType = valueType & 0x7f
-			// Array of strings: null-terminated UTF-16LE strings concatenated
-			if (baseType === VALUE_TYPE.STRING) {
-				const s = BinXmlParser.utf16.decode(valueBytes)
-				const parts = s.split('\0').filter(p => p.length > 0)
-				return xmlEscape(parts.join(', '))
+	private renderValue(vb: Uint8Array, vt: number): string {
+		if (vb.length === 0) return ''
+
+		// Array types
+		if (vt & 0x80) {
+			const base = vt & 0x7f
+			if (base === VALUE_TYPE.STRING) {
+				return xmlEscape(BinXmlParser.utf16.decode(vb).split('\0').filter(Boolean).join(', '))
 			}
-			// Fixed-size array types
-			let elemSize = 0
-			if (baseType === VALUE_TYPE.INT8 || baseType === VALUE_TYPE.UINT8) {
-				elemSize = 1
-			} else if (
-				baseType === VALUE_TYPE.INT16 ||
-				baseType === VALUE_TYPE.UINT16
-			) {
-				elemSize = 2
-			} else if (
-				baseType === VALUE_TYPE.INT32 ||
-				baseType === VALUE_TYPE.UINT32 ||
-				baseType === VALUE_TYPE.FLOAT ||
-				baseType === VALUE_TYPE.HEX32
-			) {
-				elemSize = 4
-			} else if (
-				baseType === VALUE_TYPE.INT64 ||
-				baseType === VALUE_TYPE.UINT64 ||
-				baseType === VALUE_TYPE.DOUBLE ||
-				baseType === VALUE_TYPE.FILETIME ||
-				baseType === VALUE_TYPE.HEX64
-			) {
-				elemSize = 8
-			} else if (
-				baseType === VALUE_TYPE.GUID ||
-				baseType === VALUE_TYPE.SYSTEMTIME
-			) {
-				elemSize = 16
+			const sizes: Record<number, number> = {
+				[VALUE_TYPE.INT8]: 1,
+				[VALUE_TYPE.UINT8]: 1,
+				[VALUE_TYPE.INT16]: 2,
+				[VALUE_TYPE.UINT16]: 2,
+				[VALUE_TYPE.INT32]: 4,
+				[VALUE_TYPE.UINT32]: 4,
+				[VALUE_TYPE.FLOAT]: 4,
+				[VALUE_TYPE.HEX32]: 4,
+				[VALUE_TYPE.INT64]: 8,
+				[VALUE_TYPE.UINT64]: 8,
+				[VALUE_TYPE.DOUBLE]: 8,
+				[VALUE_TYPE.FILETIME]: 8,
+				[VALUE_TYPE.HEX64]: 8,
+				[VALUE_TYPE.GUID]: 16,
+				[VALUE_TYPE.SYSTEMTIME]: 16,
 			}
-			if (elemSize > 0 && valueBytes.length >= elemSize) {
-				const results: string[] = []
-				for (let i = 0; i + elemSize <= valueBytes.length; i += elemSize) {
-					const elem = new Uint8Array(
-						valueBytes.buffer,
-						valueBytes.byteOffset + i,
-						elemSize
-					)
-					results.push(this.renderSubstitutionValue(elem, baseType))
-				}
-				return results.join(', ')
+			const es = sizes[base]
+			if (es && vb.length >= es) {
+				const r: string[] = []
+				for (let i = 0; i + es <= vb.length; i += es)
+					r.push(this.renderValue(new Uint8Array(vb.buffer, vb.byteOffset + i, es), base))
+				return r.join(', ')
 			}
-			// Fallback: render as hex (string concat instead of array+join)
-			let hex = ''
-			for (let i = 0; i < valueBytes.length; i++) {
-				hex += HEX[valueBytes[i]!]!
-			}
-			return hex
+			return this.toHex(vb)
 		}
 
-		// Scalar types — use this.chunkDv with offset instead of allocating a new DataView
-		const vOff = valueBytes.byteOffset - this.chunkDv.byteOffset
+		const o = vb.byteOffset - this.chunkDv.byteOffset
+		const dv = this.chunkDv
 
-		switch (valueType) {
+		switch (vt) {
 			case VALUE_TYPE.NULL:
 				return ''
 			case VALUE_TYPE.STRING: {
-				let s = BinXmlParser.utf16.decode(valueBytes)
-				if (s.endsWith('\0')) s = s.slice(0, -1)
-				return xmlEscape(s)
+				let s = BinXmlParser.utf16.decode(vb)
+				return xmlEscape(s.endsWith('\0') ? s.slice(0, -1) : s)
 			}
 			case VALUE_TYPE.ANSI_STRING: {
-				let s = BinXmlParser.ascii.decode(valueBytes)
-				if (s.endsWith('\0')) s = s.slice(0, -1)
-				return xmlEscape(s)
+				let s = BinXmlParser.ascii.decode(vb)
+				return xmlEscape(s.endsWith('\0') ? s.slice(0, -1) : s)
 			}
 			case VALUE_TYPE.INT8:
-				return String(this.chunkDv.getInt8(vOff))
+				return String(dv.getInt8(o))
 			case VALUE_TYPE.UINT8:
-				return String(this.chunkDv.getUint8(vOff))
+				return String(dv.getUint8(o))
 			case VALUE_TYPE.INT16:
-				return String(this.chunkDv.getInt16(vOff, true))
+				return String(dv.getInt16(o, true))
 			case VALUE_TYPE.UINT16:
-				return String(this.chunkDv.getUint16(vOff, true))
+				return String(dv.getUint16(o, true))
 			case VALUE_TYPE.INT32:
-				return String(this.chunkDv.getInt32(vOff, true))
+				return String(dv.getInt32(o, true))
 			case VALUE_TYPE.UINT32:
-				return String(this.chunkDv.getUint32(vOff, true))
+				return String(dv.getUint32(o, true))
 			case VALUE_TYPE.INT64:
-				return String(this.chunkDv.getBigInt64(vOff, true))
+				return String(dv.getBigInt64(o, true))
 			case VALUE_TYPE.UINT64:
-				return String(this.chunkDv.getBigUint64(vOff, true))
+				return String(dv.getBigUint64(o, true))
 			case VALUE_TYPE.FLOAT:
-				return String(this.chunkDv.getFloat32(vOff, true))
+				return String(dv.getFloat32(o, true))
 			case VALUE_TYPE.DOUBLE:
-				return String(this.chunkDv.getFloat64(vOff, true))
+				return String(dv.getFloat64(o, true))
 			case VALUE_TYPE.BOOL:
-				return this.chunkDv.getUint32(vOff, true) ? 'true' : 'false'
-			case VALUE_TYPE.BINARY: {
-				let hex = ''
-				for (let i = 0; i < valueBytes.length; i++) {
-					hex += HEX[valueBytes[i]!]!
-				}
-				return hex
+				return dv.getUint32(o, true) ? 'true' : 'false'
+			case VALUE_TYPE.BINARY:
+				return this.toHex(vb)
+			case VALUE_TYPE.HEX32:
+				return `0x${dv.getUint32(o, true).toString(16).padStart(8, '0')}`
+			case VALUE_TYPE.HEX64:
+				return `0x${dv.getBigUint64(o, true).toString(16).padStart(16, '0')}`
+			case VALUE_TYPE.SIZE:
+				return vb.length === 8
+					? `0x${dv.getBigUint64(o, true).toString(16).padStart(16, '0')}`
+					: `0x${dv.getUint32(o, true).toString(16).padStart(8, '0')}`
+			case VALUE_TYPE.FILETIME:
+				return vb.length < 8 ? '' : filetimeLoHiToIso(dv.getUint32(o, true), dv.getUint32(o + 4, true))
+			case VALUE_TYPE.SYSTEMTIME: {
+				if (vb.length < 16) return ''
+				const g = (off: number) => dv.getUint16(o + off, true)
+				const p = (v: number, n: number) => String(v).padStart(n, '0')
+				return `${g(0)}-${p(g(2), 2)}-${p(g(6), 2)}T${p(g(8), 2)}:${p(g(10), 2)}:${p(g(12), 2)}.${p(g(14), 3)}Z`
 			}
 			case VALUE_TYPE.GUID: {
-				if (valueBytes.length < 16) return ''
-				const d1 = this.chunkDv
-					.getUint32(vOff, true)
-					.toString(16)
-					.padStart(8, '0')
-				const d2 = this.chunkDv
-					.getUint16(vOff + 4, true)
-					.toString(16)
-					.padStart(4, '0')
-				const d3 = this.chunkDv
-					.getUint16(vOff + 6, true)
-					.toString(16)
-					.padStart(4, '0')
-				return (
-					'{' +
-					d1 +
-					'-' +
-					d2 +
-					'-' +
-					d3 +
-					'-' +
-					HEX[valueBytes[8]!]! +
-					HEX[valueBytes[9]!]! +
-					HEX[valueBytes[10]!]! +
-					HEX[valueBytes[11]!]! +
-					'-' +
-					HEX[valueBytes[12]!]! +
-					HEX[valueBytes[13]!]! +
-					HEX[valueBytes[14]!]! +
-					HEX[valueBytes[15]!]! +
-					'}'
-				)
-			}
-			case VALUE_TYPE.SIZE: {
-				if (valueBytes.length === 8)
-					return `0x${this.chunkDv.getBigUint64(vOff, true).toString(16).padStart(16, '0')}`
-				return `0x${this.chunkDv.getUint32(vOff, true).toString(16).padStart(8, '0')}`
-			}
-			case VALUE_TYPE.FILETIME: {
-				if (valueBytes.length < 8) return ''
-				return filetimeLoHiToIso(
-					this.chunkDv.getUint32(vOff, true),
-					this.chunkDv.getUint32(vOff + 4, true)
-				)
-			}
-			case VALUE_TYPE.SYSTEMTIME: {
-				if (valueBytes.length < 16) return ''
-				const yr = this.chunkDv.getUint16(vOff, true)
-				const mo = this.chunkDv.getUint16(vOff + 2, true)
-				const dy = this.chunkDv.getUint16(vOff + 6, true)
-				const hr = this.chunkDv.getUint16(vOff + 8, true)
-				const mn = this.chunkDv.getUint16(vOff + 10, true)
-				const sc = this.chunkDv.getUint16(vOff + 12, true)
-				const msVal = this.chunkDv.getUint16(vOff + 14, true)
-				return `${yr}-${String(mo).padStart(2, '0')}-${String(dy).padStart(2, '0')}T${String(hr).padStart(2, '0')}:${String(mn).padStart(2, '0')}:${String(sc).padStart(2, '0')}.${String(msVal).padStart(3, '0')}Z`
+				if (vb.length < 16) return ''
+				const d1 = dv.getUint32(o, true).toString(16).padStart(8, '0')
+				const d2 = dv.getUint16(o + 4, true).toString(16).padStart(4, '0')
+				const d3 = dv.getUint16(o + 6, true).toString(16).padStart(4, '0')
+				let tail = ''
+				for (let i = 8; i < 16; i++) tail += HEX[vb[i]!]!
+				return `{${d1}-${d2}-${d3}-${tail.slice(0, 4)}-${tail.slice(4)}}`
 			}
 			case VALUE_TYPE.SID: {
-				if (valueBytes.length < 8) return ''
-				const rev = valueBytes[0]!
-				const subCount = valueBytes[1]!
+				if (vb.length < 8) return ''
 				let auth = 0
-				for (let i = 2; i < 8; i++) {
-					auth = auth * 256 + valueBytes[i]!
-				}
-				let sid = `S-${rev}-${auth}`
-				for (let i = 0; i < subCount; i++) {
-					if (8 + i * 4 + 4 > valueBytes.length) break
-					sid += `-${this.chunkDv.getUint32(vOff + 8 + i * 4, true)}`
-				}
+				for (let i = 2; i < 8; i++) auth = auth * 256 + vb[i]!
+				let sid = `S-${vb[0]}-${auth}`
+				for (let i = 0; i < vb[1]! && 8 + i * 4 + 4 <= vb.length; i++)
+					sid += `-${dv.getUint32(o + 8 + i * 4, true)}`
 				return sid
 			}
-			case VALUE_TYPE.HEX32:
-				return `0x${this.chunkDv.getUint32(vOff, true).toString(16).padStart(8, '0')}`
-			case VALUE_TYPE.HEX64:
-				return `0x${this.chunkDv.getBigUint64(vOff, true).toString(16).padStart(16, '0')}`
-			case VALUE_TYPE.BINXML: {
-				const embeddedChunkBase =
-					valueBytes.byteOffset - this.chunkDv.byteOffset
-				return this.parseDocument(valueBytes, embeddedChunkBase)
-			}
-			default: {
-				let hex = ''
-				for (let i = 0; i < valueBytes.length; i++) {
-					hex += HEX[valueBytes[i]!]!
-				}
-				return `<!-- unknown value type 0x${HEX[valueType] ?? '??'} -->${hex}`
-			}
+			case VALUE_TYPE.BINXML:
+				return this.parseDocument(vb, vb.byteOffset - this.chunkDv.byteOffset)
+			default:
+				return `<!-- unknown type 0x${HEX[vt] ?? '??'} -->${this.toHex(vb)}`
 		}
 	}
 
-	private compileTemplate(
-		tplBytes: Uint8Array,
-		tplBodyStart: number
-	): CompiledTemplate | null {
-		const b: CompileBuilder = {
-			parts: [''],
-			subIds: [],
-			isOptional: [],
-			bail: false
-		}
-		const pos: ParsePosition = {offset: 0}
-
-		// Skip fragment header if present
-		if (tplBytes.length >= 4 && tplBytes[0] === TOKEN.FRAGMENT_HEADER) {
-			pos.offset += 4
-		}
-
-		this.compileContent(tplBytes, pos, tplBodyStart, b)
-		return b.bail
-			? null
-			: {parts: b.parts, subIds: b.subIds, isOptional: b.isOptional}
+	private resolveSub(subs: SubstitutionValue[] | null, id: number, optional: boolean): string {
+		if (!subs || id >= subs.length) return ''
+		const sub = subs[id]!
+		if (optional && (sub.type === VALUE_TYPE.NULL || sub.size === 0)) return ''
+		if (sub.rendered === null) sub.rendered = this.renderValue(sub.bytes, sub.type)
+		return sub.rendered
 	}
 
-	private compileContent(
-		bytes: Uint8Array,
-		pos: ParsePosition,
-		binxmlChunkBase: number,
-		b: CompileBuilder
-	): void {
-		const dvBias = bytes.byteOffset - this.chunkDv.byteOffset
-		while (pos.offset < bytes.length) {
-			if (b.bail) return
-			const tok = bytes[pos.offset] ?? 0
-			const base = tok & ~TOKEN.HAS_MORE_DATA_FLAG
-
-			if (
-				base === TOKEN.EOF ||
-				base === TOKEN.CLOSE_START_ELEMENT ||
-				base === TOKEN.CLOSE_EMPTY_ELEMENT ||
-				base === TOKEN.END_ELEMENT ||
-				base === TOKEN.ATTRIBUTE
-			) {
-				break
-			}
-
-			if (base === TOKEN.OPEN_START_ELEMENT) {
-				this.compileElement(bytes, pos, binxmlChunkBase, b)
-			} else if (base === TOKEN.VALUE) {
-				pos.offset++ // consume token
-				pos.offset++ // value type
-				const str = this.readUnicodeTextString(bytes, pos, dvBias)
-				b.parts[b.parts.length - 1] += xmlEscape(str)
-			} else if (base === TOKEN.NORMAL_SUBSTITUTION) {
-				pos.offset++ // consume token
-				const subId = this.chunkDv.getUint16(dvBias + pos.offset, true)
-				pos.offset += 2
-				pos.offset++ // subValType
-				b.subIds.push(subId)
-				b.isOptional.push(false)
-				b.parts.push('')
-			} else if (base === TOKEN.OPTIONAL_SUBSTITUTION) {
-				pos.offset++ // consume token
-				const subId = this.chunkDv.getUint16(dvBias + pos.offset, true)
-				pos.offset += 2
-				pos.offset++ // subValType
-				b.subIds.push(subId)
-				b.isOptional.push(true)
-				b.parts.push('')
-			} else if (base === TOKEN.CHAR_REF) {
-				pos.offset++ // consume token
-				const charVal = this.chunkDv.getUint16(dvBias + pos.offset, true)
-				pos.offset += 2
-				b.parts[b.parts.length - 1] += `&#${charVal};`
-			} else if (base === TOKEN.ENTITY_REF) {
-				pos.offset++ // consume token
-				const nameOff = this.chunkDv.getUint32(dvBias + pos.offset, true)
-				pos.offset += 4
-				const entityName = this.readName(nameOff)
-				b.parts[b.parts.length - 1] += `&${entityName};`
-			} else if (base === TOKEN.CDATA_SECTION) {
-				pos.offset++ // consume token
-				const cdataStr = this.readUnicodeTextString(bytes, pos, dvBias)
-				b.parts[b.parts.length - 1] += `<![CDATA[${cdataStr}]]>`
-			} else if (
-				base === TOKEN.TEMPLATE_INSTANCE ||
-				base === TOKEN.FRAGMENT_HEADER
-			) {
-				b.bail = true
-				return
-			} else {
-				// Unknown token — bail to generic parser
-				b.bail = true
-				return
-			}
+	// Skip past an inline name definition if the offset points to current position
+	private skipInlineName(bytes: Uint8Array, pos: ParsePosition, nameOff: number, chunkBase: number, bias: number) {
+		if (nameOff === chunkBase + pos.offset) {
+			const chars = this.chunkDv.getUint16(bias + pos.offset + 6, true)
+			pos.offset += 10 + chars * 2
 		}
 	}
 
-	private compileElement(
-		bytes: Uint8Array,
-		pos: ParsePosition,
-		binxmlChunkBase: number,
-		b: CompileBuilder
-	): void {
-		const dvBias = bytes.byteOffset - this.chunkDv.byteOffset
-		const tok = bytes[pos.offset] ?? 0
-		const hasAttrs = Boolean(tok & TOKEN.HAS_MORE_DATA_FLAG)
-		pos.offset++ // consume token
-
-		pos.offset += 2 // depId
-		pos.offset += 4 // dataSize
-		const nameOffset = this.chunkDv.getUint32(dvBias + pos.offset, true)
-		pos.offset += 4
-		// Inline name structure present only when defined here
-		if (nameOffset === binxmlChunkBase + pos.offset) {
-			const elemNameChars = this.chunkDv.getUint16(
-				dvBias + pos.offset + 6,
-				true
-			)
-			pos.offset += 10 + elemNameChars * 2
-		}
-
-		const elemName = this.readName(nameOffset)
-		b.parts[b.parts.length - 1] += `<${elemName}`
-
-		// Parse attribute list if present
-		if (hasAttrs) {
-			const attrListSize = this.chunkDv.getUint32(dvBias + pos.offset, true)
-			pos.offset += 4
-			const attrEnd = pos.offset + attrListSize
-
-			while (pos.offset < attrEnd) {
-				if (b.bail) return
-				const attrTok = bytes[pos.offset] ?? 0
-				const attrBase = attrTok & ~TOKEN.HAS_MORE_DATA_FLAG
-				if (attrBase !== TOKEN.ATTRIBUTE) break
-
-				pos.offset++ // consume attribute token
-				const attrNameOff = this.chunkDv.getUint32(dvBias + pos.offset, true)
-				pos.offset += 4
-				// Inline name structure present only when defined here
-				if (attrNameOff === binxmlChunkBase + pos.offset) {
-					const attrNameChars = this.chunkDv.getUint16(
-						dvBias + pos.offset + 6,
-						true
-					)
-					pos.offset += 10 + attrNameChars * 2
-				}
-				const attrName = this.readName(attrNameOff)
-
-				b.parts[b.parts.length - 1] += ` ${attrName}="`
-				this.compileContent(bytes, pos, binxmlChunkBase, b)
-				if (b.bail) return
-				b.parts[b.parts.length - 1] += '"'
-			}
-		}
-
-		// Next token: CloseEmptyElement or CloseStartElement
-		if (pos.offset >= bytes.length) {
-			b.parts[b.parts.length - 1] += '/>'
-			return
-		}
-
-		const closeTok = bytes[pos.offset] ?? 0
-		if (closeTok === TOKEN.CLOSE_EMPTY_ELEMENT) {
-			pos.offset++ // consume 0x03
-			b.parts[b.parts.length - 1] += '/>'
-		} else if (closeTok === TOKEN.CLOSE_START_ELEMENT) {
-			pos.offset++ // consume 0x02
-			b.parts[b.parts.length - 1] += '>'
-			this.compileContent(bytes, pos, binxmlChunkBase, b)
-			if (b.bail) return
-			if (
-				pos.offset < bytes.length &&
-				bytes[pos.offset] === TOKEN.END_ELEMENT
-			) {
-				pos.offset++
-			}
-			b.parts[b.parts.length - 1] += `</${elemName}>`
-		} else {
-			b.parts[b.parts.length - 1] +=
-				'><!-- UNEXPECTED close token 0x' +
-				(HEX[closeTok] ?? '??') +
-				' --></' +
-				elemName +
-				'>'
-		}
-	}
-
-	private renderCompiled(
-		compiled: CompiledTemplate,
-		subs: SubstitutionValue[]
-	): string {
-		const {parts, subIds, isOptional} = compiled
-		let result = parts[0]!
-		for (let i = 0; i < subIds.length; i++) {
-			const subId = subIds[i]!
-			if (subId < subs.length) {
-				const sub = subs[subId]!
-				if (!isOptional[i] || (sub.type !== VALUE_TYPE.NULL && sub.size > 0)) {
-					if (sub.rendered === null) {
-						sub.rendered = this.renderSubstitutionValue(sub.bytes, sub.type)
-					}
-					result += sub.rendered
-				}
-			}
-			result += parts[i + 1]!
-		}
-		return result
-	}
-
-	private parseContent(
-		bytes: Uint8Array,
-		pos: ParsePosition,
-		subs: SubstitutionValue[] | null,
-		binxmlChunkBase: number
-	): string {
-		const dvBias = bytes.byteOffset - this.chunkDv.byteOffset
-		let result = ''
-
-		while (pos.offset < bytes.length) {
-			const tok = bytes[pos.offset] ?? 0
-			const base = tok & ~TOKEN.HAS_MORE_DATA_FLAG
-
-			if (
-				base === TOKEN.EOF ||
-				base === TOKEN.CLOSE_START_ELEMENT ||
-				base === TOKEN.CLOSE_EMPTY_ELEMENT ||
-				base === TOKEN.END_ELEMENT ||
-				base === TOKEN.ATTRIBUTE
-			) {
-				break
-			}
-
-			if (base === TOKEN.OPEN_START_ELEMENT) {
-				result += this.parseElement(bytes, pos, subs, binxmlChunkBase)
-			} else if (base === TOKEN.VALUE) {
-				pos.offset++ // consume token
-				pos.offset++ // value type
-				const str = this.readUnicodeTextString(bytes, pos, dvBias)
-				result += xmlEscape(str)
-			} else if (base === TOKEN.NORMAL_SUBSTITUTION) {
-				pos.offset++ // consume token
-				const subId = this.chunkDv.getUint16(dvBias + pos.offset, true)
-				pos.offset += 2
-				pos.offset++ // subValType
-				if (subs && subId < subs.length) {
-					const sub = subs[subId]!
-					if (sub.rendered === null) {
-						sub.rendered = this.renderSubstitutionValue(sub.bytes, sub.type)
-					}
-					result += sub.rendered
-				}
-			} else if (base === TOKEN.OPTIONAL_SUBSTITUTION) {
-				pos.offset++ // consume token
-				const subId = this.chunkDv.getUint16(dvBias + pos.offset, true)
-				pos.offset += 2
-				pos.offset++ // subValType
-				if (subs && subId < subs.length) {
-					const sub = subs[subId]!
-					if (sub.type !== VALUE_TYPE.NULL && sub.size > 0) {
-						if (sub.rendered === null) {
-							sub.rendered = this.renderSubstitutionValue(sub.bytes, sub.type)
-						}
-						result += sub.rendered
-					}
-				}
-			} else if (base === TOKEN.CHAR_REF) {
-				pos.offset++ // consume token
-				const charVal = this.chunkDv.getUint16(dvBias + pos.offset, true)
-				pos.offset += 2
-				result += `&#${charVal};`
-			} else if (base === TOKEN.ENTITY_REF) {
-				pos.offset++ // consume token
-				const nameOff = this.chunkDv.getUint32(dvBias + pos.offset, true)
-				pos.offset += 4
-				const entityName = this.readName(nameOff)
-				result += `&${entityName};`
-			} else if (base === TOKEN.CDATA_SECTION) {
-				pos.offset++ // consume token
-				const cdataStr = this.readUnicodeTextString(bytes, pos, dvBias)
-				result += `<![CDATA[${cdataStr}]]>`
-			} else if (base === TOKEN.TEMPLATE_INSTANCE) {
-				result += this.parseTemplateInstance(bytes, pos, binxmlChunkBase)
-			} else if (base === TOKEN.FRAGMENT_HEADER) {
-				result += this.parseFragment(bytes, pos, binxmlChunkBase)
-			} else {
-				result +=
-					'<!-- UNEXPECTED content token 0x' +
-					(HEX[tok] ?? '??') +
-					' (' +
-					tokenName(tok) +
-					') at offset ' +
-					pos.offset +
-					' -->'
-				pos.offset++
-			}
-		}
-
-		return result
-	}
-
-	private parseElement(
-		bytes: Uint8Array,
-		pos: ParsePosition,
-		subs: SubstitutionValue[] | null,
-		binxmlChunkBase: number
-	): string {
-		const dvBias = bytes.byteOffset - this.chunkDv.byteOffset
-		const tok = bytes[pos.offset] ?? 0
-		const hasAttrs = Boolean(tok & TOKEN.HAS_MORE_DATA_FLAG)
-		pos.offset++ // consume token
-
-		pos.offset += 2 // depId
-		pos.offset += 4 // dataSize
-		const nameOffset = this.chunkDv.getUint32(dvBias + pos.offset, true)
-		pos.offset += 4
-		// Inline name structure is present only when defined here (nameOffset points to current chunk position)
-		if (nameOffset === binxmlChunkBase + pos.offset) {
-			const elemNameChars = this.chunkDv.getUint16(
-				dvBias + pos.offset + 6,
-				true
-			)
-			pos.offset += 10 + elemNameChars * 2
-		}
-
-		const elemName = this.readName(nameOffset)
-		let xml = `<${elemName}`
-
-		// Parse attribute list if present
-		if (hasAttrs) {
-			const attrListSize = this.chunkDv.getUint32(dvBias + pos.offset, true)
-			pos.offset += 4
-			const attrEnd = pos.offset + attrListSize
-
-			while (pos.offset < attrEnd) {
-				const attrTok = bytes[pos.offset] ?? 0
-				const attrBase = attrTok & ~TOKEN.HAS_MORE_DATA_FLAG
-				if (attrBase !== TOKEN.ATTRIBUTE) break
-
-				pos.offset++ // consume attribute token
-				const attrNameOff = this.chunkDv.getUint32(dvBias + pos.offset, true)
-				pos.offset += 4
-				// Inline name structure present only when defined here
-				if (attrNameOff === binxmlChunkBase + pos.offset) {
-					const attrNameChars = this.chunkDv.getUint16(
-						dvBias + pos.offset + 6,
-						true
-					)
-					pos.offset += 10 + attrNameChars * 2
-				}
-				const attrName = this.readName(attrNameOff)
-
-				const attrValue = this.parseContent(bytes, pos, subs, binxmlChunkBase)
-				xml += ` ${attrName}="${attrValue}"`
-			}
-		}
-
-		// Next token: CloseEmptyElement or CloseStartElement
-		if (pos.offset >= bytes.length) {
-			return `${xml}/>`
-		}
-
-		const closeTok = bytes[pos.offset] ?? 0
-		if (closeTok === TOKEN.CLOSE_EMPTY_ELEMENT) {
-			pos.offset++ // consume 0x03
-			return `${xml}/>`
-		}
-		if (closeTok === TOKEN.CLOSE_START_ELEMENT) {
-			pos.offset++ // consume 0x02
-			xml += '>'
-			xml += this.parseContent(bytes, pos, subs, binxmlChunkBase)
-			if (
-				pos.offset < bytes.length &&
-				bytes[pos.offset] === TOKEN.END_ELEMENT
-			) {
-				pos.offset++
-			}
-			return `${xml}</${elemName}>`
-		}
-		return (
-			xml +
-			'><!-- UNEXPECTED close token 0x' +
-			(HEX[closeTok] ?? '??') +
-			' --></' +
-			elemName +
-			'>'
-		)
-	}
-
-	private parseTemplateInstance(
-		bytes: Uint8Array,
-		pos: ParsePosition,
-		binxmlChunkBase: number
-	): string {
-		const dvBias = bytes.byteOffset - this.chunkDv.byteOffset
-		pos.offset++ // consume 0x0C token
-
-		// Read the always-present 9 bytes
-		pos.offset++ // unknown1 (version?)
-		pos.offset += 4 // unknown2 (template id?)
-		const defDataOffset = this.chunkDv.getUint32(dvBias + pos.offset, true)
-		pos.offset += 4
-
-		// Determine inline vs back-reference
-		const currentChunkRelOffset = binxmlChunkBase + pos.offset
-		const isInline = defDataOffset === currentChunkRelOffset
-
-		let guidStr = ''
-		let dataSize = 0
-
-		if (isInline) {
-			pos.offset += 4 // next def offset
-			const guidBytesArr = new Uint8Array(
-				bytes.buffer,
-				bytes.byteOffset + pos.offset,
-				16
-			)
-			guidStr = formatGuid(guidBytesArr)
-			pos.offset += 16
-			dataSize = this.chunkDv.getUint32(dvBias + pos.offset, true)
-			pos.offset += 4
-
-			if (this.tplStats) {
-				if (!this.tplStats.defsByOffset[defDataOffset]) {
-					this.tplStats.defsByOffset[defDataOffset] = {
-						guid: guidStr,
-						defDataOffset,
-						dataSize,
-						firstSeenRecord: this.tplStats.currentRecordId
-					}
-				}
-				if (!this.tplStats.definitions[guidStr]) {
-					this.tplStats.definitions[guidStr] =
-						this.tplStats.defsByOffset[defDataOffset]!
-					this.tplStats.definitionCount++
-				}
-			}
-
-			pos.offset += dataSize
-		} else {
-			const cachedDef = this.tplStats.defsByOffset[defDataOffset]
-			if (cachedDef) {
-				guidStr = cachedDef.guid
-				dataSize = cachedDef.dataSize
-			} else if (defDataOffset + 24 <= this.chunkDv.byteLength) {
-				// Fallback: read definition header directly from chunk bytes.
-				// The template pointer table may not index all definitions
-				// (e.g. templates nested inside embedded BinXml payloads).
-				const guidBytesArr = new Uint8Array(
-					this.chunkDv.buffer,
-					this.chunkDv.byteOffset + defDataOffset + 4,
-					16
-				)
-				guidStr = formatGuid(guidBytesArr)
-				dataSize = this.chunkDv.getUint32(defDataOffset + 20, true)
-
-				this.tplStats.defsByOffset[defDataOffset] = {
-					guid: guidStr,
-					defDataOffset,
-					dataSize,
-					firstSeenRecord: this.tplStats.currentRecordId
-				}
-				if (!this.tplStats.definitions[guidStr]) {
-					this.tplStats.definitions[guidStr] =
-						this.tplStats.defsByOffset[defDataOffset]!
-					this.tplStats.definitionCount++
-				}
-			}
-		}
-
-		// Track reference count (array not needed — only count is exported)
-		if (this.tplStats) {
-			this.tplStats.referenceCount++
-		}
-
-		// --- Template Instance Data ---
-		const numValues = this.chunkDv.getUint32(dvBias + pos.offset, true)
-		pos.offset += 4
-
-		// Read descriptors inline (no intermediate array allocation)
-		const descStart = pos.offset
-		pos.offset += numValues * 4 // skip all descriptors: 2 size + 1 type + 1 padding each
-
-		// Read value data and build subs with lazy rendering
-		const subs: SubstitutionValue[] = []
-		for (let i = 0; i < numValues; i++) {
-			const descOff = descStart + i * 4
-			const valSize = this.chunkDv.getUint16(dvBias + descOff, true)
-			const valType = bytes[descOff + 2] ?? 0
-
-			let valBytes: Uint8Array
-			if (valSize > 0 && pos.offset + valSize <= bytes.length) {
-				valBytes = new Uint8Array(
-					bytes.buffer,
-					bytes.byteOffset + pos.offset,
-					valSize
-				)
-			} else {
-				valBytes = EMPTY_BYTES
-			}
-			pos.offset += valSize
-			subs.push({
-				type: valType,
-				size: valSize,
-				bytes: valBytes,
-				rendered: null // lazy: rendered on first access in parseContent
-			})
-		}
-
-		// Parse the template definition's element tree from the chunk
-		let tplFound = true
+	private parseContent(bytes: Uint8Array, pos: ParsePosition, subs: SubstitutionValue[] | null, chunkBase: number): string {
+		const bias = bytes.byteOffset - this.chunkDv.byteOffset
 		let xml = ''
-		try {
-			if (dataSize === 0) {
-				tplFound = false
-				throw new Error(
-					`no template definition found for defOffset=${hex32(defDataOffset)}`
-				)
-			}
-			const tplBodyStart = defDataOffset + 24
-			if (tplBodyStart + dataSize > this.chunkDv.byteLength) {
-				tplFound = false
-				throw new Error(
-					`template def offset ${hex32(defDataOffset)} + size ${dataSize} exceeds chunk`
-				)
-			}
 
-			const tplBytes = new Uint8Array(
-				this.chunkDv.buffer,
-				this.chunkDv.byteOffset + tplBodyStart,
-				dataSize
-			)
+		while (pos.offset < bytes.length) {
+			const tok = bytes[pos.offset]!
+			const base = tok & ~TOKEN.HAS_MORE_DATA_FLAG
 
-			// Check compiled cache (keyed by GUID, persists across chunks)
-			let compiled = this.tplStats.compiled.get(guidStr)
-			if (compiled === undefined) {
-				compiled = this.compileTemplate(tplBytes, tplBodyStart)
-				this.tplStats.compiled.set(guidStr, compiled)
-			}
+			if (base === TOKEN.EOF || base === TOKEN.CLOSE_START_ELEMENT ||
+				base === TOKEN.CLOSE_EMPTY_ELEMENT || base === TOKEN.END_ELEMENT ||
+				base === TOKEN.ATTRIBUTE) break
 
-			if (compiled !== null) {
-				xml = this.renderCompiled(compiled, subs)
-			} else {
-				// Fall through to generic parseContent path
-				const tplPos: ParsePosition = {offset: 0}
-
-				// Skip fragment header (4 bytes: 0x0F, major, minor, flags)
-				if (tplBytes.length >= 4 && tplBytes[0] === TOKEN.FRAGMENT_HEADER) {
-					tplPos.offset += 4
+			switch (base) {
+				case TOKEN.OPEN_START_ELEMENT:
+					xml += this.parseElement(bytes, pos, subs, chunkBase)
+					break
+				case TOKEN.VALUE:
+					pos.offset += 2 // token + type
+					xml += xmlEscape(this.readUtf16(bytes, pos, bias))
+					break
+				case TOKEN.NORMAL_SUBSTITUTION: {
+					pos.offset++
+					const id = this.chunkDv.getUint16(bias + pos.offset, true)
+					pos.offset += 3 // id + type
+					xml += this.resolveSub(subs, id, false)
+					break
 				}
-
-				xml = this.parseContent(tplBytes, tplPos, subs, tplBodyStart)
+				case TOKEN.OPTIONAL_SUBSTITUTION: {
+					pos.offset++
+					const id = this.chunkDv.getUint16(bias + pos.offset, true)
+					pos.offset += 3
+					xml += this.resolveSub(subs, id, true)
+					break
+				}
+				case TOKEN.CHAR_REF: {
+					pos.offset++
+					xml += `&#${this.chunkDv.getUint16(bias + pos.offset, true)};`
+					pos.offset += 2
+					break
+				}
+				case TOKEN.ENTITY_REF: {
+					pos.offset++
+					const off = this.chunkDv.getUint32(bias + pos.offset, true)
+					pos.offset += 4
+					xml += `&${this.readName(off)};`
+					break
+				}
+				case TOKEN.CDATA_SECTION:
+					pos.offset++
+					xml += `<![CDATA[${this.readUtf16(bytes, pos, bias)}]]>`
+					break
+				case TOKEN.TEMPLATE_INSTANCE:
+					xml += this.parseTemplateInstance(bytes, pos, chunkBase)
+					break
+				case TOKEN.FRAGMENT_HEADER:
+					xml += this.parseFragment(bytes, pos, chunkBase)
+					break
+				default:
+					xml += `<!-- UNEXPECTED token 0x${HEX[tok] ?? '??'} (${tokenName(tok)}) at ${pos.offset} -->`
+					pos.offset++
 			}
-		} catch (e) {
-			xml = `<!-- template parse error: ${e instanceof Error ? e.message : String(e)} -->`
-			tplFound = false
 		}
-
-		if (this.tplStats && !tplFound) {
-			this.tplStats.missingRefs.push({
-				recordId: this.tplStats.currentRecordId,
-				guid: guidStr || '(unknown)',
-				defDataOffset
-			})
-			this.tplStats.missingCount++
-		}
-
 		return xml
 	}
 
-	parseDocument(binxml: Uint8Array, binxmlChunkBase: number): string {
-		const pos: ParsePosition = {offset: 0}
-		const dvBias = binxml.byteOffset - this.chunkDv.byteOffset
-		let result = ''
+	private parseElement(bytes: Uint8Array, pos: ParsePosition, subs: SubstitutionValue[] | null, chunkBase: number): string {
+		const bias = bytes.byteOffset - this.chunkDv.byteOffset
+		const hasAttrs = Boolean(bytes[pos.offset]! & TOKEN.HAS_MORE_DATA_FLAG)
+		pos.offset += 7 // token + depId(2) + dataSize(4)
 
-		while (pos.offset < binxml.length) {
-			const tok = binxml[pos.offset] ?? 0
-			const base = tok & ~TOKEN.HAS_MORE_DATA_FLAG
+		const nameOff = this.chunkDv.getUint32(bias + pos.offset, true)
+		pos.offset += 4
+		this.skipInlineName(bytes, pos, nameOff, chunkBase, bias)
+		const name = this.readName(nameOff)
 
-			if (base === TOKEN.EOF) {
-				break
-			}
-			if (base === TOKEN.FRAGMENT_HEADER) {
-				result += this.parseFragment(binxml, pos, binxmlChunkBase)
-			} else if (base === TOKEN.PI_TARGET) {
-				pos.offset++ // consume 0x0A
-				const piNameOff = this.chunkDv.getUint32(dvBias + pos.offset, true)
+		let xml = `<${name}`
+
+		if (hasAttrs) {
+			const listSize = this.chunkDv.getUint32(bias + pos.offset, true)
+			pos.offset += 4
+			const end = pos.offset + listSize
+			while (pos.offset < end) {
+				if ((bytes[pos.offset]! & ~TOKEN.HAS_MORE_DATA_FLAG) !== TOKEN.ATTRIBUTE) break
+				pos.offset++
+				const aOff = this.chunkDv.getUint32(bias + pos.offset, true)
 				pos.offset += 4
-				const piName = this.readName(piNameOff)
-				let pi = `<?${piName}`
-				if (
-					pos.offset < binxml.length &&
-					binxml[pos.offset] === TOKEN.PI_DATA
-				) {
-					pos.offset++ // consume 0x0B
-					const piText = this.readUnicodeTextString(binxml, pos, dvBias)
-					if (piText) pi += ` ${piText}`
-				}
-				result += `${pi}?>`
-			} else {
-				result +=
-					'<!-- UNEXPECTED document token 0x' +
-					(HEX[tok] ?? '??') +
-					' (' +
-					tokenName(tok) +
-					') at offset ' +
-					pos.offset +
-					' -->'
-				break
+				this.skipInlineName(bytes, pos, aOff, chunkBase, bias)
+				xml += ` ${this.readName(aOff)}="${this.parseContent(bytes, pos, subs, chunkBase)}"`
 			}
 		}
 
-		return result
+		if (pos.offset >= bytes.length) return `${xml}/>`
+
+		const close = bytes[pos.offset]!
+		if (close === TOKEN.CLOSE_EMPTY_ELEMENT) {
+			pos.offset++;
+			return `${xml}/>`
+		}
+		if (close === TOKEN.CLOSE_START_ELEMENT) {
+			pos.offset++
+			xml += `>${this.parseContent(bytes, pos, subs, chunkBase)}`
+			if (pos.offset < bytes.length && bytes[pos.offset] === TOKEN.END_ELEMENT) pos.offset++
+			return `${xml}</${name}>`
+		}
+		return `${xml}><!-- BAD close 0x${HEX[close] ?? '??'} --></${name}>`
 	}
 
-	private parseFragment(
-		binxml: Uint8Array,
-		pos: ParsePosition,
-		binxmlChunkBase: number
-	): string {
-		if (pos.offset + 4 > binxml.length) {
-			return `<!-- TRUNCATED fragment header at offset ${pos.offset} -->\n`
-		}
-
-		// Consume fragment header (4 bytes)
+	private parseTemplateInstance(bytes: Uint8Array, pos: ParsePosition, chunkBase: number): string {
+		const bias = bytes.byteOffset - this.chunkDv.byteOffset
+		pos.offset += 6 // token(1) + unknown1(1) + unknown2(4)
+		const defOff = this.chunkDv.getUint32(bias + pos.offset, true)
 		pos.offset += 4
 
-		if (pos.offset >= binxml.length) {
-			return '<!-- TRUNCATED after fragment header -->\n'
+		const isInline = defOff === chunkBase + pos.offset
+		let guid = '', dataSize = 0
+
+		if (isInline) {
+			pos.offset += 4 // next def offset
+			guid = formatGuid(new Uint8Array(bytes.buffer, bytes.byteOffset + pos.offset, 16))
+			pos.offset += 16
+			dataSize = this.chunkDv.getUint32(bias + pos.offset, true)
+			pos.offset += 4 + dataSize
+		} else if (this.tplStats.defsByOffset[defOff]) {
+			guid = this.tplStats.defsByOffset[defOff]!.guid
+			dataSize = this.tplStats.defsByOffset[defOff]!.dataSize
+		} else if (defOff + 24 <= this.chunkDv.byteLength) {
+			guid = formatGuid(new Uint8Array(this.chunkDv.buffer, this.chunkDv.byteOffset + defOff + 4, 16))
+			dataSize = this.chunkDv.getUint32(defOff + 20, true)
 		}
 
-		const nextTok = binxml[pos.offset] ?? 0
-		const nextBase = nextTok & ~TOKEN.HAS_MORE_DATA_FLAG
+		// Cache definition
+		if (guid && !this.tplStats.defsByOffset[defOff]) {
+			const def = {guid, defDataOffset: defOff, dataSize, firstSeenRecord: this.tplStats.currentRecordId}
+			this.tplStats.defsByOffset[defOff] = def
+			if (!this.tplStats.definitions[guid]) {
+				this.tplStats.definitions[guid] = def
+				this.tplStats.definitionCount++
+			}
+		}
+		this.tplStats.referenceCount++
 
-		if (nextBase === TOKEN.TEMPLATE_INSTANCE) {
-			return this.parseTemplateInstance(binxml, pos, binxmlChunkBase)
+		// Read substitution values
+		const numValues = this.chunkDv.getUint32(bias + pos.offset, true)
+		pos.offset += 4
+		const descStart = pos.offset
+		pos.offset += numValues * 4
+
+		const subs: SubstitutionValue[] = []
+		for (let i = 0; i < numValues; i++) {
+			const dOff = descStart + i * 4
+			const size = this.chunkDv.getUint16(bias + dOff, true)
+			const type = bytes[dOff + 2] ?? 0
+			const vb = size > 0 && pos.offset + size <= bytes.length
+				? new Uint8Array(bytes.buffer, bytes.byteOffset + pos.offset, size)
+				: EMPTY_BYTES
+			pos.offset += size
+			subs.push({type, size, bytes: vb, rendered: null})
 		}
-		if (nextBase === TOKEN.OPEN_START_ELEMENT) {
-			return this.parseElement(binxml, pos, null, binxmlChunkBase)
+
+		// Parse template body
+		if (dataSize === 0 || defOff + 24 + dataSize > this.chunkDv.byteLength) {
+			this.tplStats.missingRefs.push({
+				recordId: this.tplStats.currentRecordId,
+				guid: guid || '(unknown)',
+				defDataOffset: defOff
+			})
+			this.tplStats.missingCount++
+			return `<!-- missing template def at ${hex32(defOff)} -->`
 		}
-		return (
-			'<!-- UNEXPECTED post-fragment token 0x' +
-			(HEX[nextTok] ?? '??') +
-			' (' +
-			tokenName(nextTok) +
-			') at offset ' +
-			pos.offset +
-			' -->\n'
-		)
+
+		const bodyStart = defOff + 24
+		const tplBytes = new Uint8Array(this.chunkDv.buffer, this.chunkDv.byteOffset + bodyStart, dataSize)
+		const tplPos: ParsePosition = {offset: 0}
+		if (tplBytes.length >= 4 && tplBytes[0] === TOKEN.FRAGMENT_HEADER) tplPos.offset += 4
+
+		return this.parseContent(tplBytes, tplPos, subs, bodyStart)
+	}
+
+	parseDocument(binxml: Uint8Array, chunkBase: number): string {
+		const pos: ParsePosition = {offset: 0}
+		const bias = binxml.byteOffset - this.chunkDv.byteOffset
+		let xml = ''
+
+		while (pos.offset < binxml.length) {
+			const tok = binxml[pos.offset]!
+			const base = tok & ~TOKEN.HAS_MORE_DATA_FLAG
+			if (base === TOKEN.EOF) break
+
+			if (base === TOKEN.FRAGMENT_HEADER) {
+				xml += this.parseFragment(binxml, pos, chunkBase)
+			} else if (base === TOKEN.PI_TARGET) {
+				pos.offset++
+				const name = this.readName(this.chunkDv.getUint32(bias + pos.offset, true))
+				pos.offset += 4
+				let pi = `<?${name}`
+				if (pos.offset < binxml.length && binxml[pos.offset] === TOKEN.PI_DATA) {
+					pos.offset++
+					pi += ` ${this.readUtf16(binxml, pos, bias)}`
+				}
+				xml += `${pi}?>`
+			} else {
+				xml += `<!-- UNEXPECTED doc token 0x${HEX[tok] ?? '??'} (${tokenName(tok)}) at ${pos.offset} -->`
+				break
+			}
+		}
+		return xml
+	}
+
+	private parseFragment(binxml: Uint8Array, pos: ParsePosition, chunkBase: number): string {
+		if (pos.offset + 4 > binxml.length) return `<!-- TRUNCATED fragment at ${pos.offset} -->`
+		pos.offset += 4
+		if (pos.offset >= binxml.length) return '<!-- TRUNCATED after fragment header -->'
+
+		const base = binxml[pos.offset]! & ~TOKEN.HAS_MORE_DATA_FLAG
+		if (base === TOKEN.TEMPLATE_INSTANCE) return this.parseTemplateInstance(binxml, pos, chunkBase)
+		if (base === TOKEN.OPEN_START_ELEMENT) return this.parseElement(binxml, pos, null, chunkBase)
+		return `<!-- UNEXPECTED post-fragment 0x${HEX[binxml[pos.offset]!] ?? '??'} at ${pos.offset} -->`
 	}
 }

@@ -24,19 +24,22 @@ public class EvtxChunk
     public EvtxChunkHeader Header { get; }
     public Dictionary<uint, BinXmlTemplateDefinition> Templates { get; }
     public List<EvtxRecord> Records { get; }
+    public string[] ParsedXml { get; }
 
     private EvtxChunk(EvtxChunkHeader header, Dictionary<uint, BinXmlTemplateDefinition> templates,
-        List<EvtxRecord> records)
+        List<EvtxRecord> records, string[] parsedXml)
     {
         Header = header;
         Templates = templates;
         Records = records;
+        ParsedXml = parsedXml;
     }
 
     /// <summary>
-    /// Parses a 64KB chunk: header, preloads templates, then walks all event records.
+    /// Parses a 64KB chunk: header, preloads templates, walks event records, and parses BinXml.
     /// </summary>
-    public static EvtxChunk Parse(ReadOnlySpan<byte> chunkData, int chunkFileOffset)
+    internal static EvtxChunk Parse(ReadOnlySpan<byte> chunkData, int chunkFileOffset,
+        byte[] fileData, Dictionary<Guid, CompiledTemplate?> compiledCache)
     {
         EvtxChunkHeader header = EvtxChunkHeader.ParseEvtxChunkHeader(chunkData);
 
@@ -68,6 +71,41 @@ public class EvtxChunk
             offset += (int)record.Value.Size;
         }
 
-        return new EvtxChunk(header, templates, records);
+        // Parse BinXml for each record
+        BinXmlParser binXml = new(fileData, chunkFileOffset, templates, compiledCache);
+        string[] parsedXml = new string[records.Count];
+        for (int i = 0; i < records.Count; i++)
+            parsedXml[i] = binXml.ParseRecord(records[i]);
+
+        return new EvtxChunk(header, templates, records, parsedXml);
+    }
+
+    /// <summary>
+    /// Parses a 64KB chunk without BinXml parsing (header + templates + records only).
+    /// </summary>
+    public static EvtxChunk Parse(ReadOnlySpan<byte> chunkData, int chunkFileOffset)
+    {
+        EvtxChunkHeader header = EvtxChunkHeader.ParseEvtxChunkHeader(chunkData);
+
+        Dictionary<uint, BinXmlTemplateDefinition> templates =
+            BinXmlTemplateDefinition.PreloadFromChunk(chunkData,
+                MemoryMarshal.Cast<byte, uint>(chunkData.Slice(384, 128)), chunkFileOffset);
+
+        uint freeSpaceEnd = Math.Min(header.FreeSpaceOffset, (uint)chunkData.Length);
+        int expectedRecords = (int)(header.LastEventRecordId - header.FirstEventRecordId + 1);
+        List<EvtxRecord> records = new List<EvtxRecord>(expectedRecords);
+
+        int offset = ChunkHeaderSize;
+        while (offset + 28 <= freeSpaceEnd)
+        {
+            if (!chunkData.Slice(offset, 4).SequenceEqual("\x2a\x2a\x00\x00"u8))
+                break;
+            EvtxRecord? record = EvtxRecord.ParseEvtxRecord(chunkData[offset..], chunkFileOffset + offset);
+            if (record == null) break;
+            records.Add(record.Value);
+            offset += (int)record.Value.Size;
+        }
+
+        return new EvtxChunk(header, templates, records, Array.Empty<string>());
     }
 }

@@ -32,6 +32,9 @@ public class EvtxParser
         List<EvtxChunk> chunks = new List<EvtxChunk>(chunkCount);
         int totalRecords = 0;
 
+        // Compiled template cache persists across chunks
+        Dictionary<Guid, CompiledTemplate?> compiledCache = new();
+
         // Single span over the whole file — no per-chunk allocations
         ReadOnlySpan<byte> span = data;
 
@@ -48,7 +51,7 @@ public class EvtxParser
                 continue;
 
             // Slice the span — no 64KB byte[] allocation per chunk
-            EvtxChunk chunk = EvtxChunk.Parse(span.Slice(offset, EvtxChunk.ChunkSize), offset);
+            EvtxChunk chunk = EvtxChunk.Parse(span.Slice(offset, EvtxChunk.ChunkSize), offset, data, compiledCache);
             chunks.Add(chunk);
             totalRecords += chunk.Records.Count;
         }
