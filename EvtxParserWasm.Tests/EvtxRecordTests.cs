@@ -16,54 +16,55 @@ public class EvtxRecordTests(ITestOutputHelper testOutputHelper)
     {
         byte[] data = File.ReadAllBytes(Path.Combine(TestDataDir, "security.evtx"));
         int chunkStart = FileHeaderSize;
-        byte[] chunkData = data[chunkStart..(chunkStart + ChunkSize)];
-        EvtxChunkHeader chunk = EvtxChunkHeader.ParseEvtxChunkHeader(chunkData);
+        EvtxChunkHeader chunk = EvtxChunkHeader.ParseEvtxChunkHeader(data.AsSpan(chunkStart, ChunkSize));
 
-        byte[] recordData = chunkData[ChunkHeaderSize..];
+        ReadOnlySpan<byte> recordData = data.AsSpan(chunkStart + ChunkHeaderSize);
+        int fileOffset = chunkStart + ChunkHeaderSize;
 
         Stopwatch sw = Stopwatch.StartNew();
-        EvtxRecord? record = EvtxRecord.ParseEvtxRecord(recordData);
+        EvtxRecord? record = EvtxRecord.ParseEvtxRecord(recordData, fileOffset);
         sw.Stop();
 
         Assert.NotNull(record);
-        Assert.True(record.Size > 28, "Record size must be larger than the fixed header");
-        Assert.Equal(record.Size, record.SizeCopy);
-        Assert.Equal(chunk.FirstEventRecordId, record.EventRecordId);
-        Assert.True(record.WrittenTime > 0);
-        Assert.True(record.EventData.Length > 0);
-        Assert.Equal((int)(record.Size - 28), record.EventData.Length);
+        Assert.True(record.Value.Size > 28, "Record size must be larger than the fixed header");
+        Assert.Equal(record.Value.Size, record.Value.SizeCopy);
+        Assert.Equal(chunk.FirstEventRecordId, record.Value.EventRecordId);
+        Assert.True(record.Value.WrittenTime > 0);
+        Assert.True(record.Value.EventDataLength > 0);
+        Assert.Equal((int)(record.Value.Size - 28), record.Value.EventDataLength);
 
         testOutputHelper.WriteLine($"[security.evtx record 0] Parsed in {sw.Elapsed.TotalMicroseconds:F1}µs");
         testOutputHelper.WriteLine(
-            $"  Size: {record.Size}, RecordId: {record.EventRecordId}, EventData: {record.EventData.Length} bytes");
+            $"  Size: {record.Value.Size}, RecordId: {record.Value.EventRecordId}, EventData: {record.Value.EventDataLength} bytes");
     }
 
     [Fact]
     public void ReturnsNullOnInvalidSize()
     {
         byte[] data = new byte[64];
-        Assert.Null(EvtxRecord.ParseEvtxRecord(data));
+        Assert.Null(EvtxRecord.ParseEvtxRecord(data, fileOffset: 0));
     }
 
     [Fact]
     public void SizeAndSizeCopyMatch()
     {
         byte[] data = File.ReadAllBytes(Path.Combine(TestDataDir, "security.evtx"));
-        byte[] chunkData = data[FileHeaderSize..(FileHeaderSize + ChunkSize)];
+        int chunkStart = FileHeaderSize;
 
         int offset = ChunkHeaderSize;
         int count = 0;
+        ReadOnlySpan<byte> chunkSpan = data.AsSpan(chunkStart, ChunkSize);
 
         while (offset < ChunkSize - 28)
         {
-            ReadOnlySpan<byte> recordSlice = chunkData.AsSpan(offset);
+            ReadOnlySpan<byte> recordSlice = chunkSpan[offset..];
             if (!recordSlice[..4].SequenceEqual("\x2a\x2a\x00\x00"u8))
                 break;
 
-            EvtxRecord? record = EvtxRecord.ParseEvtxRecord(recordSlice);
+            EvtxRecord? record = EvtxRecord.ParseEvtxRecord(recordSlice, chunkStart + offset);
             Assert.NotNull(record);
-            Assert.Equal(record.Size, record.SizeCopy);
-            offset += (int)record.Size;
+            Assert.Equal(record.Value.Size, record.Value.SizeCopy);
+            offset += (int)record.Value.Size;
             count++;
         }
 
@@ -75,26 +76,26 @@ public class EvtxRecordTests(ITestOutputHelper testOutputHelper)
     public void ParsesAllRecordsInFirstChunk()
     {
         byte[] data = File.ReadAllBytes(Path.Combine(TestDataDir, "security.evtx"));
-        byte[] chunkData = data[FileHeaderSize..(FileHeaderSize + ChunkSize)];
-        EvtxChunkHeader chunk = EvtxChunkHeader.ParseEvtxChunkHeader(chunkData);
+        int chunkStart = FileHeaderSize;
+        EvtxChunkHeader chunk = EvtxChunkHeader.ParseEvtxChunkHeader(data.AsSpan(chunkStart, ChunkSize));
 
         Stopwatch sw = new Stopwatch();
         int offset = ChunkHeaderSize;
         List<EvtxRecord> records = new List<EvtxRecord>();
 
-        ReadOnlySpan<byte> span = chunkData;
+        ReadOnlySpan<byte> span = data.AsSpan(chunkStart, ChunkSize);
         while (offset < ChunkSize - 28)
         {
             if (!span.Slice(offset, 4).SequenceEqual("\x2a\x2a\x00\x00"u8))
                 break;
 
             sw.Start();
-            EvtxRecord? record = EvtxRecord.ParseEvtxRecord(span[offset..]);
+            EvtxRecord? record = EvtxRecord.ParseEvtxRecord(span[offset..], chunkStart + offset);
             sw.Stop();
 
             Assert.NotNull(record);
-            records.Add(record);
-            offset += (int)record.Size;
+            records.Add(record.Value);
+            offset += (int)record.Value.Size;
         }
 
         Assert.True(records.Count > 0);

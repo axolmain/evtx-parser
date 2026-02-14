@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace EvtxParserWasm.Tests;
 
@@ -10,22 +11,23 @@ public class BinXmlTemplateDefinitionTests(ITestOutputHelper testOutputHelper)
     private const int FileHeaderSize = 4096;
     private const int ChunkSize = 65536;
 
-    private static byte[] GetChunkData(string filename, int chunkIndex = 0)
+    private static (byte[] fileData, int chunkFileOffset) GetChunkInfo(string filename, int chunkIndex = 0)
     {
         byte[] data = File.ReadAllBytes(Path.Combine(TestDataDir, filename));
         int offset = FileHeaderSize + chunkIndex * ChunkSize;
-        return data[offset..(offset + ChunkSize)];
+        return (data, offset);
     }
 
     [Fact]
     public void PreloadsTemplatesFromFirstChunk()
     {
-        byte[] chunkData = GetChunkData("security.evtx");
-        EvtxChunkHeader chunkHeader = EvtxChunkHeader.ParseEvtxChunkHeader(chunkData);
+        var (fileData, chunkOffset) = GetChunkInfo("security.evtx");
+        ReadOnlySpan<byte> chunkData = fileData.AsSpan(chunkOffset, ChunkSize);
+        ReadOnlySpan<uint> tplPtrs = MemoryMarshal.Cast<byte, uint>(chunkData.Slice(384, 128));
 
         Stopwatch sw = Stopwatch.StartNew();
         Dictionary<uint, BinXmlTemplateDefinition> cache =
-            BinXmlTemplateDefinition.PreloadFromChunk(chunkData, chunkHeader.TemplatePtrs);
+            BinXmlTemplateDefinition.PreloadFromChunk(chunkData, tplPtrs, chunkOffset);
         sw.Stop();
 
         Assert.True(cache.Count > 0, "Should find at least one template definition");
@@ -41,19 +43,19 @@ public class BinXmlTemplateDefinitionTests(ITestOutputHelper testOutputHelper)
     [Fact]
     public void TemplateDefinitionsHaveValidData()
     {
-        byte[] chunkData = GetChunkData("security.evtx");
-        EvtxChunkHeader chunkHeader = EvtxChunkHeader.ParseEvtxChunkHeader(chunkData);
+        var (fileData, chunkOffset) = GetChunkInfo("security.evtx");
+        ReadOnlySpan<byte> chunkData = fileData.AsSpan(chunkOffset, ChunkSize);
+        ReadOnlySpan<uint> tplPtrs = MemoryMarshal.Cast<byte, uint>(chunkData.Slice(384, 128));
         Dictionary<uint, BinXmlTemplateDefinition> cache =
-            BinXmlTemplateDefinition.PreloadFromChunk(chunkData, chunkHeader.TemplatePtrs);
+            BinXmlTemplateDefinition.PreloadFromChunk(chunkData, tplPtrs, chunkOffset);
 
         foreach ((uint offset, BinXmlTemplateDefinition def) in cache)
         {
             Assert.Equal(offset, def.DefDataOffset);
             Assert.NotEqual(Guid.Empty, def.Guid);
             Assert.True(def.DataSize > 0, $"Template at offset {offset} has zero DataSize");
-            Assert.Equal((int)def.DataSize, def.Data.Length);
             // Template body should start with 0x0F (FragmentHeader token)
-            Assert.Equal(0x0F, def.Data[0]);
+            Assert.Equal(0x0F, def.GetData(fileData)[0]);
         }
     }
 
@@ -70,14 +72,17 @@ public class BinXmlTemplateDefinitionTests(ITestOutputHelper testOutputHelper)
         for (int ci = 0; ci < fileHeader.NumberOfChunks; ci++)
         {
             int offset = FileHeaderSize + ci * ChunkSize;
-            byte[] chunkData = data[offset..(offset + ChunkSize)];
-            EvtxChunkHeader chunkHeader = EvtxChunkHeader.ParseEvtxChunkHeader(chunkData);
+            ReadOnlySpan<byte> chunkData = data.AsSpan(offset, ChunkSize);
+            ReadOnlySpan<uint> tplPtrs = MemoryMarshal.Cast<byte, uint>(chunkData.Slice(384, 128));
 
             // Count direct pointers (non-zero entries in table)
-            int directPtrs = chunkHeader.TemplatePtrs.Count(p => p != 0);
+            int directPtrs = 0;
+            for (int i = 0; i < tplPtrs.Length; i++)
+                if (tplPtrs[i] != 0)
+                    directPtrs++;
 
             Dictionary<uint, BinXmlTemplateDefinition> cache =
-                BinXmlTemplateDefinition.PreloadFromChunk(chunkData, chunkHeader.TemplatePtrs);
+                BinXmlTemplateDefinition.PreloadFromChunk(chunkData, tplPtrs, offset);
             totalTemplates += cache.Count;
             chainedTemplates += cache.Count - directPtrs;
         }
@@ -104,14 +109,14 @@ public class BinXmlTemplateDefinitionTests(ITestOutputHelper testOutputHelper)
                 int offset = FileHeaderSize + ci * ChunkSize;
                 if (offset + ChunkSize > data.Length) break;
 
-                byte[] chunkData = data[offset..(offset + ChunkSize)];
-                if (!chunkData.AsSpan()[..8].SequenceEqual("ElfChnk\0"u8)) continue;
+                ReadOnlySpan<byte> chunkData = data.AsSpan(offset, ChunkSize);
+                if (!chunkData[..8].SequenceEqual("ElfChnk\0"u8)) continue;
 
-                EvtxChunkHeader chunkHeader = EvtxChunkHeader.ParseEvtxChunkHeader(chunkData);
+                ReadOnlySpan<uint> tplPtrs = MemoryMarshal.Cast<byte, uint>(chunkData.Slice(384, 128));
 
                 sw.Restart();
                 Dictionary<uint, BinXmlTemplateDefinition> cache =
-                    BinXmlTemplateDefinition.PreloadFromChunk(chunkData, chunkHeader.TemplatePtrs);
+                    BinXmlTemplateDefinition.PreloadFromChunk(chunkData, tplPtrs, offset);
                 sw.Stop();
 
                 totalTemplates += cache.Count;
@@ -127,10 +132,10 @@ public class BinXmlTemplateDefinitionTests(ITestOutputHelper testOutputHelper)
     public void HandlesEmptyPointerTable()
     {
         byte[] chunkData = new byte[ChunkSize];
-        uint[] emptyPtrs = new uint[32];
+        ReadOnlySpan<uint> emptyPtrs = stackalloc uint[32];
 
         Dictionary<uint, BinXmlTemplateDefinition> cache =
-            BinXmlTemplateDefinition.PreloadFromChunk(chunkData, emptyPtrs);
+            BinXmlTemplateDefinition.PreloadFromChunk(chunkData, emptyPtrs, chunkFileOffset: 0);
 
         Assert.Empty(cache);
     }
@@ -139,11 +144,12 @@ public class BinXmlTemplateDefinitionTests(ITestOutputHelper testOutputHelper)
     public void HandlesOutOfBoundsPointer()
     {
         byte[] chunkData = new byte[ChunkSize];
-        uint[] badPtrs = new uint[32];
-        badPtrs[0] = 99999; // beyond chunk boundary
+        uint[] badPtrsArr = new uint[32];
+        badPtrsArr[0] = 99999; // beyond chunk boundary
+        ReadOnlySpan<uint> badPtrs = badPtrsArr;
 
         Dictionary<uint, BinXmlTemplateDefinition>
-            cache = BinXmlTemplateDefinition.PreloadFromChunk(chunkData, badPtrs);
+            cache = BinXmlTemplateDefinition.PreloadFromChunk(chunkData, badPtrs, chunkFileOffset: 0);
 
         Assert.Empty(cache);
     }

@@ -25,9 +25,6 @@ public class EvtxChunkHeaderTests(ITestOutputHelper testOutputHelper)
         Assert.True(chunk.LastEventRecordId >= chunk.FirstEventRecordId);
         Assert.True(chunk.FreeSpaceOffset > 0);
         Assert.True(chunk.Checksum != 0);
-        Assert.Equal(64, chunk.CommonStringOffsets.Length);
-        Assert.Equal(32, chunk.TemplatePtrs.Length);
-
         testOutputHelper.WriteLine($"[security.evtx chunk 0] Parsed in {sw.Elapsed.TotalMicroseconds:F1}µs");
         testOutputHelper.WriteLine($"  Records: {chunk.FirstEventRecordNumber}–{chunk.LastEventRecordNumber}");
         testOutputHelper.WriteLine($"  IDs: {chunk.FirstEventRecordId}–{chunk.LastEventRecordId}");

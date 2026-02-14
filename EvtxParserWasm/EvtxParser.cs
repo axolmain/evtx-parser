@@ -5,12 +5,14 @@ namespace EvtxParserWasm;
 /// </summary>
 public class EvtxParser
 {
+    public byte[] RawData { get; }
     public EvtxFileHeader FileHeader { get; }
     public List<EvtxChunk> Chunks { get; }
     public int TotalRecords { get; }
 
-    private EvtxParser(EvtxFileHeader fileHeader, List<EvtxChunk> chunks, int totalRecords)
+    private EvtxParser(byte[] rawData, EvtxFileHeader fileHeader, List<EvtxChunk> chunks, int totalRecords)
     {
+        RawData = rawData;
         FileHeader = fileHeader;
         Chunks = chunks;
         TotalRecords = totalRecords;
@@ -22,15 +24,18 @@ public class EvtxParser
     public static EvtxParser Parse(byte[] data)
     {
         EvtxFileHeader fileHeader = EvtxFileHeader.ParseEvtxFileHeader(data);
-        ushort chunkStart = fileHeader.HeaderBlockSize;
+        int chunkStart = fileHeader.HeaderBlockSize;
 
-        List<EvtxChunk> chunks = new List<EvtxChunk>(fileHeader.NumberOfChunks);
+        // Compute chunk count from file size — handles files >4GB where ushort maxes at 65535
+        int chunkCount = (data.Length - chunkStart) / EvtxChunk.ChunkSize;
+
+        List<EvtxChunk> chunks = new List<EvtxChunk>(chunkCount);
         int totalRecords = 0;
 
         // Single span over the whole file — no per-chunk allocations
         ReadOnlySpan<byte> span = data;
 
-        for (int i = 0; i < fileHeader.NumberOfChunks; i++)
+        for (int i = 0; i < chunkCount; i++)
         {
             int offset = chunkStart + i * EvtxChunk.ChunkSize;
 
@@ -43,11 +48,11 @@ public class EvtxParser
                 continue;
 
             // Slice the span — no 64KB byte[] allocation per chunk
-            EvtxChunk chunk = EvtxChunk.Parse(span.Slice(offset, EvtxChunk.ChunkSize));
+            EvtxChunk chunk = EvtxChunk.Parse(span.Slice(offset, EvtxChunk.ChunkSize), offset);
             chunks.Add(chunk);
             totalRecords += chunk.Records.Count;
         }
 
-        return new EvtxParser(fileHeader, chunks, totalRecords);
+        return new EvtxParser(data, fileHeader, chunks, totalRecords);
     }
 }

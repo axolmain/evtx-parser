@@ -24,28 +24,33 @@ internal readonly struct TemplateHeaderLayout
 /// <param name="NextTemplateOffset">Offset 0, 4 bytes — Next template definition offset in hash chain. 0 if end of chain.</param>
 /// <param name="Guid">Offset 4, 16 bytes — Template identifier GUID.</param>
 /// <param name="DataSize">Offset 20, 4 bytes — Size of the template body (fragment header + element tree + EOF token).</param>
-/// <param name="Data">Offset 24, variable — Raw template body bytes.</param>
-public record BinXmlTemplateDefinition(
+/// <param name="DataFileOffset">Absolute file offset of the template body bytes.</param>
+public readonly record struct BinXmlTemplateDefinition(
     uint DefDataOffset,
     uint NextTemplateOffset,
     Guid Guid,
     uint DataSize,
-    byte[] Data)
+    int DataFileOffset)
 {
+    /// <summary>
+    /// Returns the template body as a span into the original file buffer.
+    /// </summary>
+    public ReadOnlySpan<byte> GetData(byte[] fileData) =>
+        fileData.AsSpan(DataFileOffset, (int)DataSize);
+
     /// <summary>
     /// Parses a template definition from chunk data at the given chunk-relative offset.
     /// </summary>
-    public static BinXmlTemplateDefinition ParseAt(ReadOnlySpan<byte> chunkData, uint offset)
+    public static BinXmlTemplateDefinition ParseAt(ReadOnlySpan<byte> chunkData, uint offset, int chunkFileOffset)
     {
         TemplateHeaderLayout header = MemoryMarshal.Read<TemplateHeaderLayout>(chunkData[(int)offset..]);
-        byte[] body = chunkData.Slice((int)offset + 24, (int)header.DataSize).ToArray();
 
         return new BinXmlTemplateDefinition(
             DefDataOffset: offset,
             NextTemplateOffset: header.NextTemplateOffset,
             Guid: header.Guid,
             DataSize: header.DataSize,
-            Data: body
+            DataFileOffset: chunkFileOffset + (int)offset + 24
         );
     }
 
@@ -54,9 +59,15 @@ public record BinXmlTemplateDefinition(
     /// following hash chains. Returns a dictionary keyed by chunk-relative offset.
     /// </summary>
     public static Dictionary<uint, BinXmlTemplateDefinition> PreloadFromChunk(
-        ReadOnlySpan<byte> chunkData, uint[] templatePtrs)
+        ReadOnlySpan<byte> chunkData, ReadOnlySpan<uint> templatePtrs, int chunkFileOffset)
     {
-        Dictionary<uint, BinXmlTemplateDefinition> cache = new Dictionary<uint, BinXmlTemplateDefinition>();
+        int nonZeroCount = 0;
+        for (int i = 0; i < templatePtrs.Length; i++)
+            if (templatePtrs[i] != 0)
+                nonZeroCount++;
+
+        Dictionary<uint, BinXmlTemplateDefinition> cache =
+            new Dictionary<uint, BinXmlTemplateDefinition>(nonZeroCount * 2);
 
         for (int i = 0; i < templatePtrs.Length; i++)
         {
@@ -68,7 +79,7 @@ public record BinXmlTemplateDefinition(
 
                 if (tplOffset + 24 > chunkData.Length) break; // bounds check
 
-                BinXmlTemplateDefinition def = ParseAt(chunkData, tplOffset);
+                BinXmlTemplateDefinition def = ParseAt(chunkData, tplOffset, chunkFileOffset);
                 cache[tplOffset] = def;
 
                 tplOffset = def.NextTemplateOffset;

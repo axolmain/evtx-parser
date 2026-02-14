@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace EvtxParserWasm;
 
 [Flags]
@@ -34,11 +36,14 @@ public class EvtxChunk
     /// <summary>
     /// Parses a 64KB chunk: header, preloads templates, then walks all event records.
     /// </summary>
-    public static EvtxChunk Parse(ReadOnlySpan<byte> chunkData)
+    public static EvtxChunk Parse(ReadOnlySpan<byte> chunkData, int chunkFileOffset)
     {
         EvtxChunkHeader header = EvtxChunkHeader.ParseEvtxChunkHeader(chunkData);
+
+        // Read template ptrs inline from the chunk span — no array allocation
         Dictionary<uint, BinXmlTemplateDefinition> templates =
-            BinXmlTemplateDefinition.PreloadFromChunk(chunkData, header.TemplatePtrs);
+            BinXmlTemplateDefinition.PreloadFromChunk(chunkData,
+                MemoryMarshal.Cast<byte, uint>(chunkData.Slice(384, 128)), chunkFileOffset);
 
         // Clamp free space offset to chunk boundary for resilience against corrupted headers
         uint freeSpaceEnd = Math.Min(header.FreeSpaceOffset, (uint)chunkData.Length);
@@ -55,12 +60,12 @@ public class EvtxChunk
             if (!chunkData.Slice(offset, 4).SequenceEqual("\x2a\x2a\x00\x00"u8))
                 break;
 
-            EvtxRecord? record = EvtxRecord.ParseEvtxRecord(chunkData[offset..]);
+            EvtxRecord? record = EvtxRecord.ParseEvtxRecord(chunkData[offset..], chunkFileOffset + offset);
 
             // TODO: Should we leave this as `break` or `continue` and log it?
             if (record == null) break;
-            records.Add(record);
-            offset += (int)record.Size;
+            records.Add(record.Value);
+            offset += (int)record.Value.Size;
         }
 
         return new EvtxChunk(header, templates, records);

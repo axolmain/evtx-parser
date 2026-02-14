@@ -27,7 +27,7 @@ public enum HeaderFlags : uint
 /// <param name="NumberOfChunks">Offset 42, 2 bytes. Number of chunks in the file.</param>
 /// <param name="FileFlags">Offset 120, 4 bytes. Dirty/Full/NoCrc32 flags.</param>
 /// <param name="Checksum">Offset 124, 4 bytes. CRC32 of the first 120 bytes of the header.</param>
-public record EvtxFileHeader(
+public readonly record struct EvtxFileHeader(
     ulong FirstChunkNumber,
     ulong LastChunkNumber,
     ulong NextRecordIdentifier,

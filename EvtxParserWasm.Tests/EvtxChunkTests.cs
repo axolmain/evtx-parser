@@ -9,20 +9,20 @@ public class EvtxChunkTests(ITestOutputHelper testOutputHelper)
 
     private const int FileHeaderSize = 4096;
 
-    private static byte[] GetChunkData(string filename, int chunkIndex = 0)
+    private static (byte[] fileData, int chunkFileOffset) GetChunkInfo(string filename, int chunkIndex = 0)
     {
         byte[] data = File.ReadAllBytes(Path.Combine(TestDataDir, filename));
         int offset = FileHeaderSize + chunkIndex * EvtxChunk.ChunkSize;
-        return data[offset..(offset + EvtxChunk.ChunkSize)];
+        return (data, offset);
     }
 
     [Fact]
     public void ParsesFirstChunkOfSecurityEvtx()
     {
-        byte[] chunkData = GetChunkData("security.evtx");
+        var (fileData, chunkOffset) = GetChunkInfo("security.evtx");
 
         Stopwatch sw = Stopwatch.StartNew();
-        EvtxChunk chunk = EvtxChunk.Parse(chunkData);
+        EvtxChunk chunk = EvtxChunk.Parse(fileData.AsSpan(chunkOffset, EvtxChunk.ChunkSize), chunkOffset);
         sw.Stop();
 
         Assert.True(chunk.Records.Count > 0);
@@ -36,8 +36,8 @@ public class EvtxChunkTests(ITestOutputHelper testOutputHelper)
     [Fact]
     public void RecordsAreSequential()
     {
-        byte[] chunkData = GetChunkData("security.evtx");
-        EvtxChunk chunk = EvtxChunk.Parse(chunkData);
+        var (fileData, chunkOffset) = GetChunkInfo("security.evtx");
+        EvtxChunk chunk = EvtxChunk.Parse(fileData.AsSpan(chunkOffset, EvtxChunk.ChunkSize), chunkOffset);
 
         for (int i = 1; i < chunk.Records.Count; i++)
             Assert.Equal(chunk.Records[i - 1].EventRecordId + 1, chunk.Records[i].EventRecordId);
@@ -46,8 +46,8 @@ public class EvtxChunkTests(ITestOutputHelper testOutputHelper)
     [Fact]
     public void RecordCountMatchesHeader()
     {
-        byte[] chunkData = GetChunkData("security.evtx");
-        EvtxChunk chunk = EvtxChunk.Parse(chunkData);
+        var (fileData, chunkOffset) = GetChunkInfo("security.evtx");
+        EvtxChunk chunk = EvtxChunk.Parse(fileData.AsSpan(chunkOffset, EvtxChunk.ChunkSize), chunkOffset);
 
         ulong expected = chunk.Header.LastEventRecordId - chunk.Header.FirstEventRecordId + 1;
         Assert.Equal((int)expected, chunk.Records.Count);
@@ -65,10 +65,9 @@ public class EvtxChunkTests(ITestOutputHelper testOutputHelper)
         for (int i = 0; i < fileHeader.NumberOfChunks; i++)
         {
             int offset = FileHeaderSize + i * EvtxChunk.ChunkSize;
-            byte[] chunkData = data[offset..(offset + EvtxChunk.ChunkSize)];
 
             sw.Restart();
-            EvtxChunk chunk = EvtxChunk.Parse(chunkData);
+            EvtxChunk chunk = EvtxChunk.Parse(data.AsSpan(offset, EvtxChunk.ChunkSize), offset);
             sw.Stop();
 
             testOutputHelper.WriteLine(
