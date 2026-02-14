@@ -1,18 +1,6 @@
 import {HEX, TOKEN, VALUE_TYPE} from './constants'
-import {
-	filetimeLoHiToIso,
-	formatGuid,
-	hex32,
-	tokenName,
-	xmlEscape
-} from './helpers'
-import type {
-	ChunkHeader,
-	CompiledTemplate,
-	ParsePosition,
-	SubstitutionValue,
-	TemplateStats
-} from './types'
+import {filetimeLoHiToIso, formatGuid, hex32, tokenName, xmlEscape} from './helpers'
+import type {ChunkHeader, CompiledTemplate, ParsePosition, SubstitutionValue, TemplateStats} from './types'
 
 // Shared empty bytes — reused for all zero-size substitution values
 const EMPTY_BYTES = new Uint8Array(0)
@@ -921,18 +909,4 @@ export class BinXmlParser {
 			' -->\n'
 		)
 	}
-}
-
-// Backward-compatible wrapper
-export function parseBinXmlDocument(
-	binxml: Uint8Array,
-	chunkDv: DataView,
-	chunkHeader: ChunkHeader | null,
-	tplStats: TemplateStats,
-	binxmlChunkBase: number
-): string {
-	return new BinXmlParser(chunkDv, chunkHeader, tplStats).parseDocument(
-		binxml,
-		binxmlChunkBase
-	)
 }

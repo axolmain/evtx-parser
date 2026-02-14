@@ -19,13 +19,13 @@ public class EvtxRecordTests(ITestOutputHelper testOutputHelper)
         byte[] chunkData = data[chunkStart..(chunkStart + ChunkSize)];
         EvtxChunkHeader chunk = EvtxChunkHeader.ParseEvtxChunkHeader(chunkData);
 
-        // First record starts right after chunk header (offset 512 within the chunk)
         byte[] recordData = chunkData[ChunkHeaderSize..];
 
         Stopwatch sw = Stopwatch.StartNew();
-        EvtxRecord record = EvtxRecord.ParseEvtxRecord(recordData);
+        EvtxRecord? record = EvtxRecord.ParseEvtxRecord(recordData);
         sw.Stop();
 
+        Assert.NotNull(record);
         Assert.True(record.Size > 28, "Record size must be larger than the fixed header");
         Assert.Equal(record.Size, record.SizeCopy);
         Assert.Equal(chunk.FirstEventRecordId, record.EventRecordId);
@@ -39,10 +39,10 @@ public class EvtxRecordTests(ITestOutputHelper testOutputHelper)
     }
 
     [Fact]
-    public void ThrowsOnBadSignature()
+    public void ReturnsNullOnInvalidSize()
     {
         byte[] data = new byte[64];
-        Assert.Throws<InvalidDataException>(() => EvtxRecord.ParseEvtxRecord(data));
+        Assert.Null(EvtxRecord.ParseEvtxRecord(data));
     }
 
     [Fact]
@@ -56,12 +56,12 @@ public class EvtxRecordTests(ITestOutputHelper testOutputHelper)
 
         while (offset < ChunkSize - 28)
         {
-            byte[] recordSlice = chunkData[offset..];
-            // Check for record magic before parsing
-            if (recordSlice[0] != 0x2a || recordSlice[1] != 0x2a || recordSlice[2] != 0x00 || recordSlice[3] != 0x00)
+            ReadOnlySpan<byte> recordSlice = chunkData.AsSpan(offset);
+            if (!recordSlice[..4].SequenceEqual("\x2a\x2a\x00\x00"u8))
                 break;
 
-            EvtxRecord record = EvtxRecord.ParseEvtxRecord(recordSlice);
+            EvtxRecord? record = EvtxRecord.ParseEvtxRecord(recordSlice);
+            Assert.NotNull(record);
             Assert.Equal(record.Size, record.SizeCopy);
             offset += (int)record.Size;
             count++;
@@ -82,22 +82,22 @@ public class EvtxRecordTests(ITestOutputHelper testOutputHelper)
         int offset = ChunkHeaderSize;
         List<EvtxRecord> records = new List<EvtxRecord>();
 
+        ReadOnlySpan<byte> span = chunkData;
         while (offset < ChunkSize - 28)
         {
-            byte[] recordSlice = chunkData[offset..];
-            if (recordSlice[0] != 0x2a || recordSlice[1] != 0x2a || recordSlice[2] != 0x00 || recordSlice[3] != 0x00)
+            if (!span.Slice(offset, 4).SequenceEqual("\x2a\x2a\x00\x00"u8))
                 break;
 
             sw.Start();
-            EvtxRecord record = EvtxRecord.ParseEvtxRecord(recordSlice);
+            EvtxRecord? record = EvtxRecord.ParseEvtxRecord(span[offset..]);
             sw.Stop();
 
+            Assert.NotNull(record);
             records.Add(record);
             offset += (int)record.Size;
         }
 
         Assert.True(records.Count > 0);
-        // Record IDs should be sequential
         for (int i = 1; i < records.Count; i++)
             Assert.Equal(records[i - 1].EventRecordId + 1, records[i].EventRecordId);
 

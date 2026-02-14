@@ -35,9 +35,7 @@ public record EvtxChunkHeader(
     uint[] CommonStringOffsets,
     uint[] TemplatePtrs)
 {
-    public static EvtxChunkHeader ParseEvtxChunkHeader(byte[] data) => ParseBytes(data);
-
-    private static EvtxChunkHeader ParseBytes(ReadOnlySpan<byte> data)
+    public static EvtxChunkHeader ParseEvtxChunkHeader(ReadOnlySpan<byte> data)
     {
         if (data.Length < 512)
             throw new InvalidDataException("Chunk header too short");

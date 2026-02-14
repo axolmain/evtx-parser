@@ -1,4 +1,4 @@
-export {BinXmlParser, parseBinXmlDocument} from './binxml'
+export {BinXmlParser} from './binxml'
 export {parseFileHeader} from './evtx-file-header'
 export {parseRecord, parseEventRecord} from './evtx-record'
 export {
