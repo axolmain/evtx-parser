@@ -12,4 +12,8 @@
     <ProjectReference Include="../EvtxParserWasm/EvtxParserWasm.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.DotNet.HotReload.WebAssembly.Browser" Version="10.0.103"/>
+  </ItemGroup>
+
 </Project>
