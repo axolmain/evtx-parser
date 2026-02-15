@@ -2,6 +2,12 @@ using System.Collections.Concurrent;
 
 namespace EvtxParserWasm;
 
+public enum OutputFormat
+{
+    Xml,
+    Json
+}
+
 /// <summary>
 /// Top-level orchestrator. Parses the file header, slices chunks, and collects all parsed data.
 /// </summary>
@@ -24,7 +30,7 @@ public class EvtxParser
     /// Parses an entire EVTX file from a byte array.
     /// maxThreads: 0 or -1 = all cores, 1 = single-threaded, N = use N threads.
     /// </summary>
-    public static EvtxParser Parse(byte[] data, int maxThreads = 0)
+    public static EvtxParser Parse(byte[] data, int maxThreads = 0, OutputFormat format = OutputFormat.Xml)
     {
         EvtxFileHeader fileHeader = EvtxFileHeader.ParseEvtxFileHeader(data);
         int chunkStart = fileHeader.HeaderBlockSize;
@@ -54,7 +60,7 @@ public class EvtxParser
         int parallelism = maxThreads > 0 ? maxThreads : -1;
         Parallel.For(0, validCount,
             new ParallelOptions { MaxDegreeOfParallelism = parallelism },
-            i => { results[i] = EvtxChunk.Parse(data, validOffsets[i], compiledCache); });
+            i => { results[i] = EvtxChunk.Parse(data, validOffsets[i], compiledCache, format); });
 
         // Phase 3 (sequential): collect results
         List<EvtxChunk> chunks = new List<EvtxChunk>(validCount);

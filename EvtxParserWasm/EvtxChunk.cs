@@ -26,21 +26,24 @@ public class EvtxChunk
     public Dictionary<uint, BinXmlTemplateDefinition> Templates { get; }
     public List<EvtxRecord> Records { get; }
     public string[] ParsedXml { get; }
+    public byte[][]? ParsedJson { get; }
 
     private EvtxChunk(EvtxChunkHeader header, Dictionary<uint, BinXmlTemplateDefinition> templates,
-        List<EvtxRecord> records, string[] parsedXml)
+        List<EvtxRecord> records, string[] parsedXml, byte[][]? parsedJson = null)
     {
         Header = header;
         Templates = templates;
         Records = records;
         ParsedXml = parsedXml;
+        ParsedJson = parsedJson;
     }
 
     /// <summary>
     /// Parses a 64KB chunk: header, preloads templates, walks event records, and parses BinXml.
     /// </summary>
     internal static EvtxChunk Parse(ReadOnlySpan<byte> chunkData, int chunkFileOffset,
-        byte[] fileData, ConcurrentDictionary<Guid, CompiledTemplate?> compiledCache)
+        byte[] fileData, ConcurrentDictionary<Guid, CompiledTemplate?> compiledCache,
+        OutputFormat format = OutputFormat.Xml)
     {
         EvtxChunkHeader header = EvtxChunkHeader.ParseEvtxChunkHeader(chunkData);
 
@@ -73,11 +76,19 @@ public class EvtxChunk
         }
 
         // Parse BinXml for each record
-        string[] parsedXml = new string[records.Count];
         BinXmlParser binXml = new(fileData, chunkFileOffset, templates, compiledCache);
+
+        if (format == OutputFormat.Json)
+        {
+            byte[][] parsedJson = new byte[records.Count][];
+            for (int i = 0; i < records.Count; i++)
+                parsedJson[i] = binXml.ParseRecordJson(records[i]);
+            return new EvtxChunk(header, templates, records, Array.Empty<string>(), parsedJson);
+        }
+
+        string[] parsedXml = new string[records.Count];
         for (int i = 0; i < records.Count; i++)
             parsedXml[i] = binXml.ParseRecord(records[i]);
-
         return new EvtxChunk(header, templates, records, parsedXml);
     }
 
@@ -115,9 +126,10 @@ public class EvtxChunk
     /// (ReadOnlySpan is a ref struct and cannot cross thread boundaries).
     /// </summary>
     internal static EvtxChunk Parse(byte[] fileData, int chunkFileOffset,
-        ConcurrentDictionary<Guid, CompiledTemplate?> compiledCache)
+        ConcurrentDictionary<Guid, CompiledTemplate?> compiledCache,
+        OutputFormat format = OutputFormat.Xml)
     {
         ReadOnlySpan<byte> chunkData = fileData.AsSpan(chunkFileOffset, ChunkSize);
-        return Parse(chunkData, chunkFileOffset, fileData, compiledCache);
+        return Parse(chunkData, chunkFileOffset, fileData, compiledCache, format);
     }
 }

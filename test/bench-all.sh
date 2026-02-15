@@ -87,41 +87,49 @@ fi
 echo "Found ${#FILES[@]} .evtx files"
 echo ""
 
-# ── Build table header dynamically ──────────────────────────────────
-header="| # | File | Size | Rust 1T (ms) | Rust 8T (ms) | JS Node (ms)"
-sep="|---|------|------|-------------|-------------|-------------"
+# ── Helper functions ─────────────────────────────────────────────────
+get_ms() { node -e "const d=JSON.parse(require('fs').readFileSync('$1','utf8')); console.log((d.results[$2].mean*1000).toFixed(1))"; }
+ratio() { node -e "console.log(($1 / $2).toFixed(1))"; }
+
+# ── Build XML table header ──────────────────────────────────────────
+xml_header="| # | File | Size | Rust 1T (ms) | Rust 8T (ms) | JS Node (ms)"
+xml_sep="|---|------|------|-------------|-------------|-------------"
 if $HAS_CSHARP; then
-  header="$header | C# 1T (ms) | C# 8T (ms)"
-  sep="$sep|------------|------------"
+  xml_header="$xml_header | C# 1T (ms) | C# 8T (ms)"
+  xml_sep="$xml_sep|------------|------------"
+fi
+xml_header="$xml_header | Rust 1T / C# 1T | Rust 8T / C# 8T | JS / C# 1T"
+xml_sep="$xml_sep|----------------|----------------|------------"
+xml_header="$xml_header |"
+xml_sep="$xml_sep|"
+
+# ── Build JSON table header ─────────────────────────────────────────
+json_header="| # | File | Size | Rust 1T (ms) | Rust 8T (ms) | JS Node (ms)"
+json_sep="|---|------|------|-------------|-------------|-------------"
+if $HAS_CSHARP; then
+  json_header="$json_header | C# 1T (ms) | C# 8T (ms)"
+  json_sep="$json_sep|------------|------------"
 fi
 if $HAS_RUST_WASM; then
-  header="$header | Rust WASM (ms)"
-  sep="$sep|---------------"
+  json_header="$json_header | Rust WASM (ms)"
+  json_sep="$json_sep|---------------"
 fi
 if $HAS_CS_WASM; then
-  header="$header | C# WASM (ms)"
-  sep="$sep|--------------"
+  json_header="$json_header | C# WASM (ms)"
+  json_sep="$json_sep|--------------"
 fi
-header="$header | JS / Rust 1T"
-sep="$sep|-------------"
-if $HAS_CSHARP; then
-  header="$header | C# 1T / Rust 1T | C# 8T / Rust 8T"
-  sep="$sep|----------------|----------------"
+json_header="$json_header | Rust 1T / C# 1T | Rust 8T / C# 8T | JS / C# 1T"
+json_sep="$json_sep|----------------|----------------|------------"
+if $HAS_RUST_WASM && $HAS_CS_WASM; then
+  json_header="$json_header | Rust WASM / C# WASM"
+  json_sep="$json_sep|--------------------"
 fi
-if $HAS_RUST_WASM; then
-  header="$header | Rust WASM / Rust 1T"
-  sep="$sep|--------------------"
-fi
-if $HAS_CS_WASM; then
-  header="$header | C# WASM / Rust 1T"
-  sep="$sep|------------------"
-fi
-header="$header |"
-sep="$sep|"
+json_header="$json_header |"
+json_sep="$json_sep|"
 
 # ── Markdown header ─────────────────────────────────────────────────
 {
-  echo "# Rust vs JS vs C# Parser Benchmark Comparison"
+  echo "# Parser Benchmark Comparison"
   echo ""
   echo "| Field | Value |"
   echo "|-------|-------|"
@@ -133,11 +141,11 @@ sep="$sep|"
   echo "| **Warmup** | $WARMUP |"
   echo "| **Runs** | $RUNS |"
   echo ""
-  echo "## Results"
-  echo ""
-  echo "$header"
-  echo "$sep"
 } > "$RESULTS"
+
+# ── Storage for rows ────────────────────────────────────────────────
+declare -a XML_ROWS=()
+declare -a JSON_ROWS=()
 
 # ── Run benchmarks ──────────────────────────────────────────────────
 i=0
@@ -152,111 +160,166 @@ for file in "${FILES[@]}"; do
   echo "[$i/${#FILES[@]}] $name ($size)"
 
   # Run JS parser first to check it doesn't error out
-  if ! node "$JS_CLI" "$file" &>/dev/null; then
-    echo "  ⚠ JS parser failed — skipping (Rust-only result)"
-    rust1t=$(hyperfine --warmup "$WARMUP" --runs "$RUNS" --style none \
-      "'$RUST_BIN' -t 1 '$file' > /dev/null" 2>&1 | grep -oP '[\d.]+(?= ms)' | head -1 || echo "–")
-    rust8t=$(hyperfine --warmup "$WARMUP" --runs "$RUNS" --style none \
-      "'$RUST_BIN' -t 8 '$file' > /dev/null" 2>&1 | grep -oP '[\d.]+(?= ms)' | head -1 || echo "–")
-    row="| $i | $name | $size | $rust1t | $rust8t | FAIL"
-    if $HAS_CSHARP; then row="$row | – | –"; fi
-    if $HAS_RUST_WASM; then row="$row | –"; fi
-    if $HAS_CS_WASM; then row="$row | –"; fi
-    row="$row | –"
-    if $HAS_CSHARP; then row="$row | – | –"; fi
-    if $HAS_RUST_WASM; then row="$row | –"; fi
-    if $HAS_CS_WASM; then row="$row | –"; fi
-    echo "$row |" >> "$RESULTS"
+  if ! node "$JS_CLI" "$file" -o json &>/dev/null; then
+    echo "  ⚠ JS parser failed — skipping"
+    XML_ROWS+=("| $i | $name | $size | – | – | FAIL | – | – | – | – | – |")
+    JSON_ROWS+=("| $i | $name | $size | – | – | FAIL | – | – | – | – | – |")
     fail=$((fail + 1))
     continue
   fi
 
-  # Build hyperfine commands dynamically
-  tmp=$(mktemp)
-  declare -a cmds=(
+  # ── XML benchmark group ──────────────────────────────────────────
+  echo "  XML benchmark..."
+  xml_tmp=$(mktemp)
+  declare -a xml_cmds=(
     --command-name "rust-1t" "'$RUST_BIN' -t 1 '$file' > /dev/null"
     --command-name "rust-8t" "'$RUST_BIN' -t 8 '$file' > /dev/null"
-    --command-name "js-node" "node '$JS_CLI' '$file' > /dev/null"
+    --command-name "js-node" "node '$JS_CLI' '$file' -o xml > /dev/null"
   )
-  idx_rust1t=0
-  idx_rust8t=1
-  idx_js=2
-  next_idx=3
+  xml_idx_rust1t=0
+  xml_idx_rust8t=1
+  xml_idx_js=2
+  xml_next=3
 
-  idx_cs1t=-1; idx_cs8t=-1; idx_rust_wasm=-1; idx_cs_wasm=-1
+  xml_idx_cs1t=-1; xml_idx_cs8t=-1
 
   if $HAS_CSHARP; then
-    cmds+=(--command-name "csharp-1t" "'$CSHARP_BIN' '$file' -t 1 > /dev/null")
-    cmds+=(--command-name "csharp-8t" "'$CSHARP_BIN' '$file' -t 8 > /dev/null")
-    idx_cs1t=$next_idx; next_idx=$((next_idx + 1))
-    idx_cs8t=$next_idx; next_idx=$((next_idx + 1))
-  fi
-
-  if $HAS_RUST_WASM; then
-    cmds+=(--command-name "rust-wasm" "node '$RUST_WASM_CLI' '$file' > /dev/null")
-    idx_rust_wasm=$next_idx; next_idx=$((next_idx + 1))
-  fi
-
-  if $HAS_CS_WASM; then
-    cmds+=(--command-name "csharp-wasm" "node '$CS_WASM_CLI' '$file' > /dev/null")
-    idx_cs_wasm=$next_idx; next_idx=$((next_idx + 1))
+    xml_cmds+=(--command-name "csharp-1t" "'$CSHARP_BIN' '$file' -t 1 -o xml > /dev/null")
+    xml_cmds+=(--command-name "csharp-8t" "'$CSHARP_BIN' '$file' -t 8 -o xml > /dev/null")
+    xml_idx_cs1t=$xml_next; xml_next=$((xml_next + 1))
+    xml_idx_cs8t=$xml_next; xml_next=$((xml_next + 1))
   fi
 
   hyperfine --warmup "$WARMUP" --runs "$RUNS" --style basic \
-    --export-json "$tmp" \
-    "${cmds[@]}" \
-    2>&1 | sed 's/^/  /'
+    --export-json "$xml_tmp" \
+    "${xml_cmds[@]}" \
+    2>&1 | sed 's/^/    /'
 
-  # Helper to extract mean ms from JSON by index
-  get_ms() { node -e "const d=JSON.parse(require('fs').readFileSync('$tmp','utf8')); console.log((d.results[$1].mean*1000).toFixed(1))"; }
-  ratio() { node -e "console.log(($1 / $2).toFixed(1))"; }
+  xml_rust1t=$(get_ms "$xml_tmp" $xml_idx_rust1t)
+  xml_rust8t=$(get_ms "$xml_tmp" $xml_idx_rust8t)
+  xml_js=$(get_ms "$xml_tmp" $xml_idx_js)
 
-  rust1t=$(get_ms $idx_rust1t)
-  rust8t=$(get_ms $idx_rust8t)
-  js_ms=$(get_ms $idx_js)
-
-  row="| $i | $name | $size | $rust1t | $rust8t | $js_ms"
+  xml_row="| $i | $name | $size | $xml_rust1t | $xml_rust8t | $xml_js"
 
   if $HAS_CSHARP; then
-    cs1t_ms=$(get_ms $idx_cs1t)
-    cs8t_ms=$(get_ms $idx_cs8t)
-    row="$row | $cs1t_ms | $cs8t_ms"
+    xml_cs1t=$(get_ms "$xml_tmp" $xml_idx_cs1t)
+    xml_cs8t=$(get_ms "$xml_tmp" $xml_idx_cs8t)
+    xml_row="$xml_row | $xml_cs1t | $xml_cs8t"
+    xml_row="$xml_row | $(ratio "$xml_rust1t" "$xml_cs1t")x | $(ratio "$xml_rust8t" "$xml_cs8t")x | $(ratio "$xml_js" "$xml_cs1t")x"
+  else
+    xml_row="$xml_row | – | – | –"
+  fi
+
+  XML_ROWS+=("$xml_row |")
+  rm -f "$xml_tmp"
+
+  # ── JSON benchmark group ─────────────────────────────────────────
+  echo "  JSON benchmark..."
+  json_tmp=$(mktemp)
+  declare -a json_cmds=(
+    --command-name "rust-1t" "'$RUST_BIN' -t 1 -o json '$file' > /dev/null"
+    --command-name "rust-8t" "'$RUST_BIN' -t 8 -o json '$file' > /dev/null"
+    --command-name "js-node" "node '$JS_CLI' '$file' -o json > /dev/null"
+  )
+  json_idx_rust1t=0
+  json_idx_rust8t=1
+  json_idx_js=2
+  json_next=3
+
+  json_idx_cs1t=-1; json_idx_cs8t=-1; json_idx_rust_wasm=-1; json_idx_cs_wasm=-1
+
+  if $HAS_CSHARP; then
+    json_cmds+=(--command-name "csharp-1t" "'$CSHARP_BIN' '$file' -t 1 -o json > /dev/null")
+    json_cmds+=(--command-name "csharp-8t" "'$CSHARP_BIN' '$file' -t 8 -o json > /dev/null")
+    json_idx_cs1t=$json_next; json_next=$((json_next + 1))
+    json_idx_cs8t=$json_next; json_next=$((json_next + 1))
   fi
 
   if $HAS_RUST_WASM; then
-    rust_wasm_ms=$(get_ms $idx_rust_wasm)
-    row="$row | $rust_wasm_ms"
+    json_cmds+=(--command-name "rust-wasm" "node '$RUST_WASM_CLI' '$file' > /dev/null")
+    json_idx_rust_wasm=$json_next; json_next=$((json_next + 1))
   fi
 
   if $HAS_CS_WASM; then
-    cs_wasm_ms=$(get_ms $idx_cs_wasm)
-    row="$row | $cs_wasm_ms"
+    json_cmds+=(--command-name "csharp-wasm" "node '$CS_WASM_CLI' '$file' > /dev/null")
+    json_idx_cs_wasm=$json_next; json_next=$((json_next + 1))
   fi
 
-  row="$row | $(ratio "$js_ms" "$rust1t")x"
+  hyperfine --warmup "$WARMUP" --runs "$RUNS" --style basic \
+    --export-json "$json_tmp" \
+    "${json_cmds[@]}" \
+    2>&1 | sed 's/^/    /'
+
+  json_rust1t=$(get_ms "$json_tmp" $json_idx_rust1t)
+  json_rust8t=$(get_ms "$json_tmp" $json_idx_rust8t)
+  json_js=$(get_ms "$json_tmp" $json_idx_js)
+
+  json_row="| $i | $name | $size | $json_rust1t | $json_rust8t | $json_js"
 
   if $HAS_CSHARP; then
-    row="$row | $(ratio "$cs1t_ms" "$rust1t")x | $(ratio "$cs8t_ms" "$rust8t")x"
+    json_cs1t=$(get_ms "$json_tmp" $json_idx_cs1t)
+    json_cs8t=$(get_ms "$json_tmp" $json_idx_cs8t)
+    json_row="$json_row | $json_cs1t | $json_cs8t"
   fi
 
   if $HAS_RUST_WASM; then
-    row="$row | $(ratio "$rust_wasm_ms" "$rust1t")x"
+    json_rust_wasm=$(get_ms "$json_tmp" $json_idx_rust_wasm)
+    json_row="$json_row | $json_rust_wasm"
   fi
 
   if $HAS_CS_WASM; then
-    row="$row | $(ratio "$cs_wasm_ms" "$rust1t")x"
+    json_cs_wasm=$(get_ms "$json_tmp" $json_idx_cs_wasm)
+    json_row="$json_row | $json_cs_wasm"
   fi
 
-  echo "$row |" >> "$RESULTS"
+  # Ratio columns (against C#)
+  if $HAS_CSHARP; then
+    json_row="$json_row | $(ratio "$json_rust1t" "$json_cs1t")x | $(ratio "$json_rust8t" "$json_cs8t")x | $(ratio "$json_js" "$json_cs1t")x"
+  else
+    json_row="$json_row | – | – | –"
+  fi
 
-  rm -f "$tmp"
+  if $HAS_RUST_WASM && $HAS_CS_WASM; then
+    json_row="$json_row | $(ratio "$json_rust_wasm" "$json_cs_wasm")x"
+  fi
+
+  JSON_ROWS+=("$json_row |")
+  rm -f "$json_tmp"
+
   pass=$((pass + 1))
   echo ""
 done
 
+# ── Write XML table ─────────────────────────────────────────────────
+{
+  echo "## XML Output Benchmark"
+  echo ""
+  echo "> Ratio columns: X / C# — values >1.0x mean C# is faster"
+  echo ""
+  echo "$xml_header"
+  echo "$xml_sep"
+  for row in "${XML_ROWS[@]}"; do
+    echo "$row"
+  done
+  echo ""
+} >> "$RESULTS"
+
+# ── Write JSON table ────────────────────────────────────────────────
+{
+  echo "## JSON Output Benchmark"
+  echo ""
+  echo "> Ratio columns: X / C# — values >1.0x mean C# is faster"
+  echo ""
+  echo "$json_header"
+  echo "$json_sep"
+  for row in "${JSON_ROWS[@]}"; do
+    echo "$row"
+  done
+  echo ""
+} >> "$RESULTS"
+
 # ── Summary ─────────────────────────────────────────────────────────
 {
-  echo ""
   echo "## Summary"
   echo ""
   echo "- **Files tested:** ${#FILES[@]}"

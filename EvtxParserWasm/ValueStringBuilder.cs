@@ -81,6 +81,8 @@ internal ref struct ValueStringBuilder
         }
     }
 
+    public ReadOnlySpan<char> AsSpan() => _chars.Slice(0, _pos);
+
     public override string ToString()
     {
         return _chars.Slice(0, _pos).ToString();
