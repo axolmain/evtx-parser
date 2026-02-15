@@ -49,7 +49,7 @@ Most records use **template instances** (token `0x0C`): a reusable XML skeleton 
 ```
 src/
   parser/       Pure TypeScript — zero DOM, zero React. Testable, Worker-ready.
-  worker/       Web Worker pool for parallel chunk parsing
+  worker/       Single Web Worker for off-main-thread parsing
   hooks/        React hooks bridging parser to UI state
   components/   React presentational + container components
 ```
@@ -63,48 +63,28 @@ src/
 | `helpers.ts` | filetimeToIso, hexDump, hex32, xmlEscape, readName, formatGuid |
 | `format.ts` | formatChunkHeaderComment, formatRecordComment |
 | `binxml.ts` | Recursive descent BinXml parser (elements, templates, substitutions) |
-| `evtx.ts` | File/chunk/record parsing, chunk validation, top-level parseEvtx |
+| `evtx-file-header.ts` | File header parsing (magic validation, offsets, flags) |
+| `evtx-chunk.ts` | Chunk header parsing, chunk validation, template preloading |
+| `evtx-record.ts` | Record parsing, BinXml-to-XML event record extraction |
+| `evtx-parser.ts` | Top-level `parseEvtx` entry point, chunk offset discovery |
+| `xml-helper.ts` | Zero-allocation XML field extractor for parsed event XML |
 
 ### Hooks
 
 | File | Purpose |
 |---|---|
 | `useEvtxParser.ts` | Parse lifecycle: idle → reading → parsing → done/error |
+| `useEvtxParserHelpers.ts` | Worker management, `parseFileBuffer` bridge |
+| `useFileLoader.ts` | File loading with IndexedDB caching |
 | `usePagination.ts` | Page state, navigation, page size selection |
 
-### Parallel Parsing (Web Workers)
+### Web Worker
 
-EVTX chunks are self-contained: template definitions and back-references (`defsByOffset`) are chunk-relative and reset per chunk. This means each 64KB chunk can be parsed independently by a separate worker.
-
-```
-Main Thread                              Worker Pool (N workers)
-  1. Read file -> ArrayBuffer
-  2. Parse file header (fast)
-  3. Discover chunk offsets (fast scan)
-  4. Slice 64KB chunks ──────────────>  Each worker:
-                                          - parseChunk (chunkStart=0)
-                                          - validateChunk
-                                          - parseBinXmlDocument per record
-  5. Collect results  <──────────────   Post back: recordOutputs, stats, warnings
-  6. Merge in chunk order
-  7. Build summary, set state
-```
-
-Pool size is `max(1, hardwareConcurrency - 1)`, reserving one core for the main thread. Chunks are distributed round-robin across workers and results are sorted back into chunk order before merging.
-
-Fallback tiers:
-- **Worker pool** (hardwareConcurrency > 2) — true parallelism
-- **Single worker** (hardwareConcurrency <= 2) — still off main thread
-- **Main thread** (Workers unavailable) — existing synchronous `parseEvtx` path
-
-Since workers parse at `chunkStart=0` (the buffer *is* the chunk), offset fields in formatted comments are adjusted post-parse to reflect the real file position.
+Parsing runs off the main thread in a single Web Worker. The main thread reads the file into an `ArrayBuffer`, transfers it to the worker, and receives streamed record batches plus a final completion message.
 
 | File | Purpose |
 |---|---|
-| `protocol.ts` | Message types for main-thread <-> worker communication |
-| `chunk-worker.ts` | Worker entry point — parses one chunk, posts results |
-| `worker-pool.ts` | Manages N workers, round-robin distribution, cancellation |
-| `merge.ts` | Merges per-chunk results into a single `EvtxParseResult` |
+| `parse-worker.ts` | Worker entry point — runs `parseEvtx`, streams record batches back |
 
 ### Key Functions
 
@@ -202,7 +182,7 @@ npm run dev
 ## Tech stack
 
 - React 19, TypeScript 5, Vite 7
-- Tailwind CSS v4
+- Mantine v8
 - Biome v2 (lint + format)
 - Vitest 4 + Testing Library (unit/integration)
 - Playwright (e2e)
