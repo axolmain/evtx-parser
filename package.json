@@ -15,7 +15,6 @@
 		"lint": "npm run lint:tsc && npm run lint:biome",
 		"format": "biome format --write",
 		"validate": "npm run lint && npm run test:ci",
-		"build:wasm": "dotnet publish ../EvtxParserWasm.Browser -c Release && cp -r ../EvtxParserWasm.Browser/bin/Release/net10.0/publish/wwwroot/_framework public/_framework",
 		"build": "vite build",
 		"preview": "vite preview",
 		"deploy": "gh-pages -d dist"
