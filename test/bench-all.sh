@@ -5,9 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 REACT_DIR="$ROOT_DIR/evtx-parser-react"
 RUST_BIN="$ROOT_DIR/evtx-master/target/release/evtx_dump"
-JS_CLI="$SCRIPT_DIR/bench-cli.ts"
-# tsx must resolve from evtx-parser-react/node_modules
-JS_CMD="cd '$REACT_DIR' && node --import tsx"
+JS_CLI_SRC="$SCRIPT_DIR/bench-cli.ts"
+JS_CLI="$SCRIPT_DIR/bench-cli.mjs"
 CSHARP_PROJECT="$ROOT_DIR/EvtxParserWasm.Bench/EvtxParserWasm.Bench.csproj"
 CSHARP_BIN="$ROOT_DIR/EvtxParserWasm.Bench/bin/publish/EvtxParserWasm.Bench"
 CS_WASM_CLI="$SCRIPT_DIR/bench-wasm-cli.mjs"
@@ -35,6 +34,11 @@ if [[ ! -x "$RUST_BIN" ]]; then
   echo "Build it with: cd evtx-master && cargo build --release" >&2
   exit 1
 fi
+
+# Bundle JS benchmark (removes tsx transpilation overhead from measurements)
+echo "Bundling JS benchmark..."
+npx --yes esbuild "$JS_CLI_SRC" --bundle --platform=node --format=esm --outfile="$JS_CLI" --log-level=warning
+echo "  JS bundle ready at $JS_CLI"
 
 # Build C# bench binary if project exists
 HAS_CSHARP=false
@@ -148,7 +152,7 @@ for file in "${FILES[@]}"; do
   echo "[$i/${#FILES[@]}] $name ($size)"
 
   # Run JS parser first to check it doesn't error out
-  if ! (cd "$REACT_DIR" && node --import tsx "$JS_CLI" "$file") &>/dev/null; then
+  if ! node "$JS_CLI" "$file" &>/dev/null; then
     echo "  ⚠ JS parser failed — skipping (Rust-only result)"
     rust1t=$(hyperfine --warmup "$WARMUP" --runs "$RUNS" --style none \
       "'$RUST_BIN' -t 1 '$file' > /dev/null" 2>&1 | grep -oP '[\d.]+(?= ms)' | head -1 || echo "–")
@@ -172,7 +176,7 @@ for file in "${FILES[@]}"; do
   declare -a cmds=(
     --command-name "rust-1t" "'$RUST_BIN' -t 1 '$file' > /dev/null"
     --command-name "rust-8t" "'$RUST_BIN' -t 8 '$file' > /dev/null"
-    --command-name "js-node" "$JS_CMD '$JS_CLI' '$file'"
+    --command-name "js-node" "node '$JS_CLI' '$file' > /dev/null"
   )
   idx_rust1t=0
   idx_rust8t=1
@@ -182,19 +186,19 @@ for file in "${FILES[@]}"; do
   idx_cs1t=-1; idx_cs8t=-1; idx_rust_wasm=-1; idx_cs_wasm=-1
 
   if $HAS_CSHARP; then
-    cmds+=(--command-name "csharp-1t" "'$CSHARP_BIN' '$file' -t 1")
-    cmds+=(--command-name "csharp-8t" "'$CSHARP_BIN' '$file' -t 8")
+    cmds+=(--command-name "csharp-1t" "'$CSHARP_BIN' '$file' -t 1 > /dev/null")
+    cmds+=(--command-name "csharp-8t" "'$CSHARP_BIN' '$file' -t 8 > /dev/null")
     idx_cs1t=$next_idx; next_idx=$((next_idx + 1))
     idx_cs8t=$next_idx; next_idx=$((next_idx + 1))
   fi
 
   if $HAS_RUST_WASM; then
-    cmds+=(--command-name "rust-wasm" "node '$RUST_WASM_CLI' '$file'")
+    cmds+=(--command-name "rust-wasm" "node '$RUST_WASM_CLI' '$file' > /dev/null")
     idx_rust_wasm=$next_idx; next_idx=$((next_idx + 1))
   fi
 
   if $HAS_CS_WASM; then
-    cmds+=(--command-name "csharp-wasm" "node '$CS_WASM_CLI' '$file'")
+    cmds+=(--command-name "csharp-wasm" "node '$CS_WASM_CLI' '$file' > /dev/null")
     idx_cs_wasm=$next_idx; next_idx=$((next_idx + 1))
   fi
 

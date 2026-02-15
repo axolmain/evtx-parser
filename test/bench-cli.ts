@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
-import {parseEvtx} from '../evtx-parser-react/src/parser/index.ts'
+import {parseEvtx} from '../evtx-parser-react/src/parser/evtx-parser'
 
 const file = process.argv[2]
 if (!file) {
@@ -9,4 +9,5 @@ if (!file) {
 }
 
 const buf = fs.readFileSync(path.resolve(file)).buffer as ArrayBuffer
-const _result = parseEvtx(buf)
+const result = parseEvtx(buf)
+process.stdout.write(JSON.stringify(result))

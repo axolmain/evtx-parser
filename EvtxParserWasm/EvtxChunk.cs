@@ -73,8 +73,8 @@ public class EvtxChunk
         }
 
         // Parse BinXml for each record
-        BinXmlParser binXml = new(fileData, chunkFileOffset, templates, compiledCache);
         string[] parsedXml = new string[records.Count];
+        BinXmlParser binXml = new(fileData, chunkFileOffset, templates, compiledCache);
         for (int i = 0; i < records.Count; i++)
             parsedXml[i] = binXml.ParseRecord(records[i]);
 

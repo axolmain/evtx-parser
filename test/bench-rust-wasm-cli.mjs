@@ -14,5 +14,6 @@ if (!file) {
 const {EvtxWasmParser} = await import(path.join(wasmPkg, 'evtx_wasm.js'))
 const buf = fs.readFileSync(path.resolve(file))
 const parser = new EvtxWasmParser(new Uint8Array(buf))
-const _result = parser.parse_all()
+const result = parser.parse_all()
+process.stdout.write(JSON.stringify(result))
 parser.free()

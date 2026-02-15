@@ -486,4 +486,7 @@ $RECYCLE.BIN/
 *trace.json
 
 # wasm
-evtx-parser-react/public/_framework/ 
+evtx-parser-react/public/_framework/
+
+# esbuild benchmark bundle
+test/bench-cli.mjs

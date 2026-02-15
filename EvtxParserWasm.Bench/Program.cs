@@ -11,6 +11,20 @@ for (int i = 1; i < args.Length; i++)
 
 byte[] data = File.ReadAllBytes(args[0]);
 EvtxParser parser = EvtxParser.Parse(data, threads);
-// Touch results to prevent dead-code elimination
-if (parser.TotalRecords < 0) Console.Write("");
+
+// Write serialized XML to stdout (matches Rust evtx_dump default XML output)
+using Stream stdout = Console.OpenStandardOutput();
+using StreamWriter writer = new StreamWriter(stdout, bufferSize: 65536);
+for (int index = 0; index < parser.Chunks.Count; index++)
+{
+    EvtxChunk chunk = parser.Chunks[index];
+    for (int i = 0; i < chunk.ParsedXml.Length; i++)
+    {
+        string xml = chunk.ParsedXml[i];
+        writer.Write(xml);
+    }
+}
+
+writer.Flush();
+
 return 0;
