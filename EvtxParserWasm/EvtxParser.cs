@@ -30,23 +30,23 @@ public class EvtxParser
     /// Parses an entire EVTX file from a byte array.
     /// maxThreads: 0 or -1 = all cores, 1 = single-threaded, N = use N threads.
     /// </summary>
-    public static EvtxParser Parse(byte[] data, int maxThreads = 0, OutputFormat format = OutputFormat.Xml)
+    public static EvtxParser Parse(byte[] fileData, int maxThreads = 0, OutputFormat format = OutputFormat.Xml)
     {
-        EvtxFileHeader fileHeader = EvtxFileHeader.ParseEvtxFileHeader(data);
+        EvtxFileHeader fileHeader = EvtxFileHeader.ParseEvtxFileHeader(fileData);
         int chunkStart = fileHeader.HeaderBlockSize;
 
         // Compute chunk count from file size
-        int chunkCount = (data.Length - chunkStart) / EvtxChunk.ChunkSize;
+        int chunkCount = (fileData.Length - chunkStart) / EvtxChunk.ChunkSize;
 
         // Phase 1 (sequential): scan chunks, validate magic, collect valid offsets
-        ReadOnlySpan<byte> span = data;
+        ReadOnlySpan<byte> span = fileData;
         int[] validOffsets = new int[chunkCount];
         int validCount = 0;
 
         for (int i = 0; i < chunkCount; i++)
         {
             int offset = chunkStart + i * EvtxChunk.ChunkSize;
-            if (offset + EvtxChunk.ChunkSize > data.Length)
+            if (offset + EvtxChunk.ChunkSize > fileData.Length)
                 break;
             if (!span.Slice(offset, 8).SequenceEqual("ElfChnk\0"u8))
                 continue;
@@ -60,7 +60,7 @@ public class EvtxParser
         int parallelism = maxThreads > 0 ? maxThreads : -1;
         Parallel.For(0, validCount,
             new ParallelOptions { MaxDegreeOfParallelism = parallelism },
-            i => { results[i] = EvtxChunk.Parse(data, validOffsets[i], compiledCache, format); });
+            i => { results[i] = EvtxChunk.Parse(fileData, validOffsets[i], compiledCache, format); });
 
         // Phase 3 (sequential): collect results
         List<EvtxChunk> chunks = new List<EvtxChunk>(validCount);
@@ -71,6 +71,6 @@ public class EvtxParser
             totalRecords += results[i].Records.Count;
         }
 
-        return new EvtxParser(data, fileHeader, chunks, totalRecords);
+        return new EvtxParser(fileData, fileHeader, chunks, totalRecords);
     }
 }

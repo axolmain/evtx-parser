@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 
 namespace EvtxParserWasm.Tests;
 
@@ -143,6 +144,39 @@ public class BinXmlParserTests(ITestOutputHelper testOutputHelper)
             }
 
             if (count >= 5) break;
+        }
+    }
+
+    [Fact]
+    public void XmlOutput_SurvivesUtf8Encoding_WithUnpairedSurrogates()
+    {
+        // EVTX files may contain corrupt UTF-16 data with unpaired surrogates (e.g. lone \uDE1E).
+        // Previously this caused EncoderFallbackException when writing XML to stdout via StreamWriter.
+        // The parser's AppendXmlEscaped now replaces unpaired surrogates with U+FFFD so all output
+        // is valid Unicode that encodes to UTF-8 without error.
+        string[] evtxFiles = Directory.GetFiles(TestDataDir, "*.evtx");
+
+        foreach (string file in evtxFiles)
+        {
+            byte[] data = File.ReadAllBytes(file);
+            EvtxParser parser = EvtxParser.Parse(data, 1);
+
+            int recordCount = 0;
+            foreach (EvtxChunk chunk in parser.Chunks)
+            {
+                for (int i = 0; i < chunk.ParsedXml.Length; i++)
+                {
+                    string xml = chunk.ParsedXml[i];
+                    // Encoding to UTF-8 must not throw
+                    byte[] utf8Bytes = Encoding.UTF8.GetBytes(xml);
+                    Assert.True(utf8Bytes.Length > 0,
+                        $"Record {chunk.Records[i].EventRecordId} in {Path.GetFileName(file)} produced empty UTF-8");
+                    recordCount++;
+                }
+            }
+
+            testOutputHelper.WriteLine(
+                $"  [{Path.GetFileName(file)}] {recordCount} records encode to UTF-8 without error");
         }
     }
 }

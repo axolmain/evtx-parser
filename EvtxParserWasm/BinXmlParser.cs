@@ -7,7 +7,7 @@ using System.Text.Json;
 namespace EvtxParserWasm;
 
 /// <summary>
-/// Pre-compiled template: string parts interleaved with substitution slots.
+/// Pre-compiled BinXmlTemplate: string parts interleaved with substitution slots.
 /// parts[0] + subs[0] + parts[1] + subs[1] + ... + parts[N]
 /// </summary>
 internal sealed class CompiledTemplate(string[] parts, int[] subIds, bool[] isOptional)
@@ -87,6 +87,7 @@ internal sealed class BinXmlParser
     /// <summary>
     /// Parses a single record's BinXml event data into XML.
     /// </summary>
+    /// <param name="record">The </param>
     public string ParseRecord(EvtxRecord record)
     {
         ReadOnlySpan<byte> eventData = record.GetEventData(_fileData);
@@ -150,6 +151,10 @@ internal sealed class BinXmlParser
     /// substitution value, which contains a nested BinXml-encoded XML fragment or TemplateInstance.
     /// The byte length of an embedded fragment includes up to and including its EOF token.
     /// </summary>
+    /// <param name="data">The BinXml byte stream to parse.</param>
+    /// <param name="pos">Current read position within <paramref name="data"/>; advanced past the fragment on return.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative offset of <paramref name="data"/>, used to resolve inline name structures.</param>
+    /// <param name="vsb">String builder that receives the rendered XML output.</param>
     private void ParseFragment(ReadOnlySpan<byte> data, ref int pos, int binxmlChunkBase, ref ValueStringBuilder vsb)
     {
         if (pos + 4 > data.Length) return;
@@ -977,24 +982,46 @@ internal sealed class BinXmlParser
 
     private static void AppendXmlEscaped(ref ValueStringBuilder vsb, scoped ReadOnlySpan<char> text)
     {
-        // Fast path: check if any escaping needed
-        if (text.IndexOfAny('&', '<', '>') < 0 && text.IndexOfAny('"', '\'') < 0)
+        // Fast path: no XML-special chars and no surrogates → bulk append
+        if (text.IndexOfAny('&', '<', '>') < 0 &&
+            text.IndexOfAny('"', '\'') < 0 &&
+            text.IndexOfAnyInRange('\uD800', '\uDFFF') < 0)
         {
             vsb.Append(text);
             return;
         }
 
-        // Slow path: escape character by character
-        foreach (char c in text)
+        // Slow path: XML-escape + replace unpaired surrogates with U+FFFD
+        for (int i = 0; i < text.Length; i++)
         {
-            switch (c)
+            char c = text[i];
+            if (char.IsHighSurrogate(c))
             {
-                case '&': vsb.Append("&amp;"); break;
-                case '<': vsb.Append("&lt;"); break;
-                case '>': vsb.Append("&gt;"); break;
-                case '"': vsb.Append("&quot;"); break;
-                case '\'': vsb.Append("&apos;"); break;
-                default: vsb.Append(c); break;
+                if (i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
+                {
+                    vsb.Append(c);
+                    vsb.Append(text[++i]);
+                }
+                else
+                {
+                    vsb.Append('\uFFFD');
+                }
+            }
+            else if (char.IsLowSurrogate(c))
+            {
+                vsb.Append('\uFFFD');
+            }
+            else
+            {
+                switch (c)
+                {
+                    case '&': vsb.Append("&amp;"); break;
+                    case '<': vsb.Append("&lt;"); break;
+                    case '>': vsb.Append("&gt;"); break;
+                    case '"': vsb.Append("&quot;"); break;
+                    case '\'': vsb.Append("&apos;"); break;
+                    default: vsb.Append(c); break;
+                }
             }
         }
     }
