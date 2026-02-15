@@ -10,4 +10,8 @@
         <InternalsVisibleTo Include="EvtxParserWasm.Tests"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <PackageReference Include="PeNet" Version="6.0.0"/>
+    </ItemGroup>
+
 </Project>

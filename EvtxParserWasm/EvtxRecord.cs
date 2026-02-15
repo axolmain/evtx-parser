@@ -69,6 +69,11 @@ public readonly record struct EvtxRecord(
         if (header.Size < 28 || header.Size > (uint)data.Length)
             return null;
 
+        // Trailing size copy must match header size (EVTX integrity check)
+        uint sizeCopy = MemoryMarshal.Read<uint>(data[(int)(header.Size - 4)..]);
+        if (sizeCopy != header.Size)
+            return null;
+
         int eventDataLength = (int)(header.Size - 28);
 
         return new EvtxRecord(
@@ -77,7 +82,7 @@ public readonly record struct EvtxRecord(
             WrittenTime: header.WrittenTime,
             EventDataFileOffset: fileOffset + 24,
             EventDataLength: eventDataLength,
-            SizeCopy: MemoryMarshal.Read<uint>(data[(int)(header.Size - 4)..])
+            SizeCopy: sizeCopy
         );
     }
 }

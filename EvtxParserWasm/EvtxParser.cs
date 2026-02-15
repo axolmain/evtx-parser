@@ -2,9 +2,19 @@ using System.Collections.Concurrent;
 
 namespace EvtxParserWasm;
 
+/// <summary>
+/// Specifies the output format for parsed EVTX event records.
+/// </summary>
 public enum OutputFormat
 {
+    /// <summary>
+    /// Render each event record as an XML string.
+    /// </summary>
     Xml,
+
+    /// <summary>
+    /// Render each event record as a UTF-8 JSON byte array.
+    /// </summary>
     Json
 }
 
@@ -13,11 +23,33 @@ public enum OutputFormat
 /// </summary>
 public class EvtxParser
 {
+    /// <summary>
+    /// The complete EVTX file bytes. Retained so parsed records can lazily reference event data via spans.
+    /// </summary>
     public byte[] RawData { get; }
+
+    /// <summary>
+    /// Parsed EVTX file header (first 4096 bytes) containing version info, chunk count, and flags.
+    /// </summary>
     public EvtxFileHeader FileHeader { get; }
+
+    /// <summary>
+    /// All successfully parsed 64KB chunks from the file, in file order.
+    /// </summary>
     public List<EvtxChunk> Chunks { get; }
+
+    /// <summary>
+    /// Total number of event records across all parsed chunks.
+    /// </summary>
     public int TotalRecords { get; }
 
+    /// <summary>
+    /// Constructs an EvtxParser result from pre-parsed components.
+    /// </summary>
+    /// <param name="rawData">Complete EVTX file bytes.</param>
+    /// <param name="fileHeader">Parsed file header.</param>
+    /// <param name="chunks">Parsed chunks.</param>
+    /// <param name="totalRecords">Aggregate record count.</param>
     private EvtxParser(byte[] rawData, EvtxFileHeader fileHeader, List<EvtxChunk> chunks, int totalRecords)
     {
         RawData = rawData;
@@ -30,7 +62,13 @@ public class EvtxParser
     /// Parses an entire EVTX file from a byte array.
     /// maxThreads: 0 or -1 = all cores, 1 = single-threaded, N = use N threads.
     /// </summary>
-    public static EvtxParser Parse(byte[] fileData, int maxThreads = 0, OutputFormat format = OutputFormat.Xml)
+    /// <param name="fileData">Complete EVTX file bytes.</param>
+    /// <param name="maxThreads">Thread count: 0/-1 = all cores, 1 = single-threaded, N = use N threads.</param>
+    /// <param name="format">Output format (XML or JSON).</param>
+    /// <param name="validateChecksums">When true, skip chunks that fail CRC32 header or data checksum validation.</param>
+    /// <returns>A fully parsed <see cref="EvtxParser"/> containing the file header, chunks, and aggregate record count.</returns>
+    public static EvtxParser Parse(byte[] fileData, int maxThreads = 0, OutputFormat format = OutputFormat.Xml,
+                                   bool validateChecksums = false)
     {
         EvtxFileHeader fileHeader = EvtxFileHeader.ParseEvtxFileHeader(fileData);
         int chunkStart = fileHeader.HeaderBlockSize;
@@ -38,7 +76,7 @@ public class EvtxParser
         // Compute chunk count from file size
         int chunkCount = (fileData.Length - chunkStart) / EvtxChunk.ChunkSize;
 
-        // Phase 1 (sequential): scan chunks, validate magic, collect valid offsets
+        // Phase 1 (sequential): scan chunks, validate magic + optional checksums, collect valid offsets
         ReadOnlySpan<byte> span = fileData;
         int[] validOffsets = new int[chunkCount];
         int validCount = 0;
@@ -50,6 +88,15 @@ public class EvtxParser
                 break;
             if (!span.Slice(offset, 8).SequenceEqual("ElfChnk\0"u8))
                 continue;
+
+            if (validateChecksums)
+            {
+                ReadOnlySpan<byte> chunkData = span.Slice(offset, EvtxChunk.ChunkSize);
+                EvtxChunkHeader header = EvtxChunkHeader.ParseEvtxChunkHeader(chunkData);
+                if (!header.ValidateHeaderChecksum(chunkData) || !header.ValidateDataChecksum(chunkData))
+                    continue;
+            }
+
             validOffsets[validCount++] = offset;
         }
 
@@ -60,7 +107,10 @@ public class EvtxParser
         int parallelism = maxThreads > 0 ? maxThreads : -1;
         Parallel.For(0, validCount,
             new ParallelOptions { MaxDegreeOfParallelism = parallelism },
-            i => { results[i] = EvtxChunk.Parse(fileData, validOffsets[i], compiledCache, format); });
+            i =>
+            {
+                results[i] = EvtxChunk.Parse(fileData, validOffsets[i], compiledCache, format);
+            });
 
         // Phase 3 (sequential): collect results
         List<EvtxChunk> chunks = new List<EvtxChunk>(validCount);

@@ -9,9 +9,20 @@ namespace EvtxParserWasm;
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 internal readonly struct TemplateHeaderLayout
 {
-    public readonly uint NextTemplateOffset; // 0: next in hash chain, 0 if end
-    public readonly Guid Guid; // 4: template identifier
-    public readonly uint DataSize; // 20: size of template body
+    /// <summary>
+    /// Offset 0, 4 bytes — Next template definition offset in the hash chain. 0 if end of chain.
+    /// </summary>
+    public readonly uint NextTemplateOffset;
+
+    /// <summary>
+    /// Offset 4, 16 bytes — Template identifier GUID.
+    /// </summary>
+    public readonly Guid Guid;
+
+    /// <summary>
+    /// Offset 20, 4 bytes — Size of the template body (fragment header + element tree + EOF token).
+    /// </summary>
+    public readonly uint DataSize;
 }
 
 /// <summary>
@@ -40,10 +51,15 @@ public readonly record struct BinXmlTemplateDefinition(
 
     /// <summary>
     /// Parses a template definition from chunk data at the given chunk-relative offset.
+    /// Returns null if the definition header or body extends beyond the chunk boundary.
     /// </summary>
-    public static BinXmlTemplateDefinition ParseAt(ReadOnlySpan<byte> chunkData, uint offset, int chunkFileOffset)
+    public static BinXmlTemplateDefinition? ParseAt(ReadOnlySpan<byte> chunkData, uint offset, int chunkFileOffset)
     {
+        if (offset + 24 > (uint)chunkData.Length) return null;
         TemplateHeaderLayout header = MemoryMarshal.Read<TemplateHeaderLayout>(chunkData[(int)offset..]);
+
+        // Validate template body fits within chunk
+        if (offset + 24 + header.DataSize > (uint)chunkData.Length) return null;
 
         return new BinXmlTemplateDefinition(
             DefDataOffset: offset,
@@ -77,12 +93,11 @@ public readonly record struct BinXmlTemplateDefinition(
             {
                 if (cache.ContainsKey(tplOffset)) break; // already cached
 
-                if (tplOffset + 24 > chunkData.Length) break; // bounds check
+                BinXmlTemplateDefinition? def = ParseAt(chunkData, tplOffset, chunkFileOffset);
+                if (def == null) break;
 
-                BinXmlTemplateDefinition def = ParseAt(chunkData, tplOffset, chunkFileOffset);
-                cache[tplOffset] = def;
-
-                tplOffset = def.NextTemplateOffset;
+                cache[tplOffset] = def.Value;
+                tplOffset = def.Value.NextTemplateOffset;
             }
         }
 

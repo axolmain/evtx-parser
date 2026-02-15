@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# ── Parse flags ─────────────────────────────────────────────────────
+NATIVE_ONLY=false
+for arg in "$@"; do
+  case "$arg" in
+    --native-only) NATIVE_ONLY=true ;;
+  esac
+done
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 REACT_DIR="$ROOT_DIR/evtx-parser-react"
@@ -240,9 +248,13 @@ if [[ ! -x "$RUST_BIN" ]]; then
 fi
 
 # Bundle JS benchmark (removes tsx transpilation overhead from measurements)
-echo "Bundling JS benchmark..."
-npx --yes esbuild "$JS_CLI_SRC" --bundle --platform=node --format=esm --outfile="$JS_CLI" --log-level=warning
-echo "  JS bundle ready at $JS_CLI"
+HAS_JS=false
+if ! $NATIVE_ONLY; then
+  echo "Bundling JS benchmark..."
+  npx --yes esbuild "$JS_CLI_SRC" --bundle --platform=node --format=esm --outfile="$JS_CLI" --log-level=warning
+  echo "  JS bundle ready at $JS_CLI"
+  HAS_JS=true
+fi
 
 # Build C# bench binary if project exists
 HAS_CSHARP=false
@@ -258,23 +270,7 @@ fi
 
 # Check for C# WASM build
 HAS_CS_WASM=false
-if [[ -d "$CS_WASM_FRAMEWORK" && -f "$CS_WASM_CLI" ]]; then
-  HAS_CS_WASM=true
-  echo "  C# WASM benchmark ready"
-else
-  log_warn "C# WASM not found — run 'npm run build:wasm' in evtx-parser-react/ to enable"
-fi
-
-# Check for Rust WASM build
 HAS_RUST_WASM=false
-if [[ -f "$RUST_WASM_PKG/evtx_wasm.js" && -f "$RUST_WASM_CLI" ]]; then
-  HAS_RUST_WASM=true
-  echo "  Rust WASM benchmark ready"
-else
-  log_warn "Rust WASM not found — run 'cd evtx-master/evtx-wasm && wasm-pack build --target nodejs --release' to enable"
-fi
-
-# ── External parsers preflight ───────────────────────────────────────
 HAS_LIBEVTX=false
 HAS_VELOCIDEX=false
 HAS_0XRAWSEC=false
@@ -282,54 +278,74 @@ HAS_PYTHON_EVTX=false
 HAS_PYTHON_EVTX_PYPY=false
 HAS_PYEVTX_RS=false
 
-mkdir -p "$EXTERNAL_DIR"
-
-# Check for go
-if command -v go &>/dev/null; then
-  # Build Velocidex
-  fetch_and_build_velocidex || log_warn "Velocidex build failed"
-  if [[ -x "$EXTERNAL_DIR/velocidex-evtx/dumpevtx" ]]; then
-    HAS_VELOCIDEX=true
-  fi
-
-  # Build 0xrawsec
-  fetch_and_build_0xrawsec || log_warn "0xrawsec build failed"
-  if [[ -x "$EXTERNAL_DIR/0xrawsec-evtx/evtxdump" ]]; then
-    HAS_0XRAWSEC=true
-  fi
-else
-  log_warn "go not found — skipping Velocidex and 0xrawsec benchmarks"
-fi
-
-# Check for libevtx build deps
-if command -v git &>/dev/null && command -v make &>/dev/null; then
-  fetch_and_build_libevtx || log_warn "libevtx build failed"
-  if [[ -x "$EXTERNAL_DIR/libevtx/evtxtools/evtxexport" ]]; then
-    HAS_LIBEVTX=true
-  fi
-else
-  log_warn "git/make not found — skipping libevtx benchmark"
-fi
-
-# Check for uv + python3 (python-evtx + pyevtx-rs)
-if command -v uv &>/dev/null && command -v python3 &>/dev/null; then
-  fetch_and_setup_python_evtx || log_warn "python-evtx setup failed"
-  if [[ -d "$EXTERNAL_DIR/python-evtx/.venv-cpython" ]]; then
-    HAS_PYTHON_EVTX=true
-  fi
-  if [[ -d "$EXTERNAL_DIR/python-evtx/.venv-pypy" ]]; then
-    HAS_PYTHON_EVTX_PYPY=true
-  fi
-
-  # pyevtx-rs: warm uv cache
-  if uv run --with evtx python -c 'import evtx' >/dev/null 2>&1; then
-    HAS_PYEVTX_RS=true
-    log_success "pyevtx-rs ready"
+if ! $NATIVE_ONLY; then
+  if [[ -d "$CS_WASM_FRAMEWORK" && -f "$CS_WASM_CLI" ]]; then
+    HAS_CS_WASM=true
+    echo "  C# WASM benchmark ready"
   else
-    log_warn "pyevtx-rs install failed — skipping"
+    log_warn "C# WASM not found — run 'npm run build:wasm' in evtx-parser-react/ to enable"
+  fi
+
+  # Check for Rust WASM build
+  if [[ -f "$RUST_WASM_PKG/evtx_wasm.js" && -f "$RUST_WASM_CLI" ]]; then
+    HAS_RUST_WASM=true
+    echo "  Rust WASM benchmark ready"
+  else
+    log_warn "Rust WASM not found — run 'cd evtx-master/evtx-wasm && wasm-pack build --target nodejs --release' to enable"
+  fi
+
+  # ── External parsers preflight ───────────────────────────────────────
+  mkdir -p "$EXTERNAL_DIR"
+
+  # Check for go
+  if command -v go &>/dev/null; then
+    # Build Velocidex
+    fetch_and_build_velocidex || log_warn "Velocidex build failed"
+    if [[ -x "$EXTERNAL_DIR/velocidex-evtx/dumpevtx" ]]; then
+      HAS_VELOCIDEX=true
+    fi
+
+    # Build 0xrawsec
+    fetch_and_build_0xrawsec || log_warn "0xrawsec build failed"
+    if [[ -x "$EXTERNAL_DIR/0xrawsec-evtx/evtxdump" ]]; then
+      HAS_0XRAWSEC=true
+    fi
+  else
+    log_warn "go not found — skipping Velocidex and 0xrawsec benchmarks"
+  fi
+
+  # Check for libevtx build deps
+  if command -v git &>/dev/null && command -v make &>/dev/null; then
+    fetch_and_build_libevtx || log_warn "libevtx build failed"
+    if [[ -x "$EXTERNAL_DIR/libevtx/evtxtools/evtxexport" ]]; then
+      HAS_LIBEVTX=true
+    fi
+  else
+    log_warn "git/make not found — skipping libevtx benchmark"
+  fi
+
+  # Check for uv + python3 (python-evtx + pyevtx-rs)
+  if command -v uv &>/dev/null && command -v python3 &>/dev/null; then
+    fetch_and_setup_python_evtx || log_warn "python-evtx setup failed"
+    if [[ -d "$EXTERNAL_DIR/python-evtx/.venv-cpython" ]]; then
+      HAS_PYTHON_EVTX=true
+    fi
+    if [[ -d "$EXTERNAL_DIR/python-evtx/.venv-pypy" ]]; then
+      HAS_PYTHON_EVTX_PYPY=true
+    fi
+
+    # pyevtx-rs: warm uv cache
+    if uv run --with evtx python -c 'import evtx' >/dev/null 2>&1; then
+      HAS_PYEVTX_RS=true
+      log_success "pyevtx-rs ready"
+    else
+      log_warn "pyevtx-rs install failed — skipping"
+    fi
+  else
+    log_warn "uv/python3 not found — skipping python-evtx and pyevtx-rs benchmarks"
   fi
 else
-  log_warn "uv/python3 not found — skipping python-evtx and pyevtx-rs benchmarks"
+  log_info "Running in --native-only mode (C# + Rust only)"
 fi
 
 # ── Collect all .evtx files ─────────────────────────────────────────
@@ -366,8 +382,10 @@ if $HAS_RUST_WASM; then
   tbl_header="$tbl_header Rust WASM |"
   tbl_sep="$tbl_sep----------------------|"
 fi
-tbl_header="$tbl_header JS Node |"
-tbl_sep="$tbl_sep----------------------|"
+if $HAS_JS; then
+  tbl_header="$tbl_header JS Node |"
+  tbl_sep="$tbl_sep----------------------|"
+fi
 if $HAS_LIBEVTX; then
   tbl_header="$tbl_header libevtx (C) |"
   tbl_sep="$tbl_sep----------------------|"
@@ -400,10 +418,11 @@ fi
   echo "| Field | Value |"
   echo "|-------|-------|"
   echo "| **Date** | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |"
-  echo "| **Node** | $(node --version) |"
+  $HAS_JS && echo "| **Node** | $(node --version) |"
   echo "| **dotnet** | $(dotnet --version 2>/dev/null || echo 'N/A') |"
   echo "| **Platform** | $(uname -s) $(uname -m) |"
   echo "| **Rust binary** | \`evtx_dump --release\` |"
+  $NATIVE_ONLY && echo "| **Mode** | native-only (C# + Rust) |"
   echo "| **Warmup** | $WARMUP |"
   echo "| **Runs** | $RUNS |"
   $HAS_LIBEVTX && echo "| **libevtx (C)** | evtxexport (single-threaded) |"
@@ -430,11 +449,13 @@ for file in "${FILES[@]}"; do
 
   echo "[$i/${#FILES[@]}] $name ($size)"
 
-  # Run JS parser first to check it doesn't error out
-  if ! node "$JS_CLI" "$file" -o json &>/dev/null; then
-    log_warn "JS parser failed — skipping"
-    fail=$((fail + 1))
-    continue
+  # Run JS parser first to check it doesn't error out (skip in native-only mode)
+  if $HAS_JS; then
+    if ! node "$JS_CLI" "$file" -o json &>/dev/null; then
+      log_warn "JS parser failed — skipping"
+      fail=$((fail + 1))
+      continue
+    fi
   fi
 
   file_label="$size $name"
@@ -445,12 +466,16 @@ for file in "${FILES[@]}"; do
   declare -a xml_cmds=(
     --command-name "rust-1t" "'$RUST_BIN' -t 1 '$file' > /dev/null"
     --command-name "rust-8t" "'$RUST_BIN' -t 8 '$file' > /dev/null"
-    --command-name "js-node" "node '$JS_CLI' '$file' -o xml > /dev/null"
   )
   xml_idx_rust1t=0
   xml_idx_rust8t=1
-  xml_idx_js=2
-  xml_next=3
+  xml_next=2
+
+  xml_idx_js=-1
+  if $HAS_JS; then
+    xml_cmds+=(--command-name "js-node" "node '$JS_CLI' '$file' -o xml > /dev/null")
+    xml_idx_js=$xml_next; xml_next=$((xml_next + 1))
+  fi
 
   xml_idx_cs1t=-1; xml_idx_cs8t=-1; xml_idx_libevtx=-1
 
@@ -488,7 +513,9 @@ for file in "${FILES[@]}"; do
     xml_row="$xml_row | not ran bc it's for web"
   fi
   # JS Node
-  xml_row="$xml_row | $(get_formatted "$xml_tmp" $xml_idx_js)"
+  if $HAS_JS; then
+    xml_row="$xml_row | $(get_formatted "$xml_tmp" $xml_idx_js)"
+  fi
   # libevtx (C)
   if $HAS_LIBEVTX; then
     xml_row="$xml_row | $(get_formatted "$xml_tmp" $xml_idx_libevtx)"
@@ -548,12 +575,16 @@ for file in "${FILES[@]}"; do
   declare -a json_cmds=(
     --command-name "rust-1t" "'$RUST_BIN' -t 1 -o json '$file' > /dev/null"
     --command-name "rust-8t" "'$RUST_BIN' -t 8 -o json '$file' > /dev/null"
-    --command-name "js-node" "node '$JS_CLI' '$file' -o json > /dev/null"
   )
   json_idx_rust1t=0
   json_idx_rust8t=1
-  json_idx_js=2
-  json_next=3
+  json_next=2
+
+  json_idx_js=-1
+  if $HAS_JS; then
+    json_cmds+=(--command-name "js-node" "node '$JS_CLI' '$file' -o json > /dev/null")
+    json_idx_js=$json_next; json_next=$((json_next + 1))
+  fi
 
   json_idx_cs1t=-1; json_idx_cs8t=-1; json_idx_rust_wasm=-1; json_idx_cs_wasm=-1
   json_idx_velocidex=-1; json_idx_0xrawsec=-1
@@ -607,7 +638,9 @@ for file in "${FILES[@]}"; do
     json_row="$json_row | $(get_formatted "$json_tmp" $json_idx_rust_wasm)"
   fi
   # JS Node
-  json_row="$json_row | $(get_formatted "$json_tmp" $json_idx_js)"
+  if $HAS_JS; then
+    json_row="$json_row | $(get_formatted "$json_tmp" $json_idx_js)"
+  fi
   # libevtx — JSON not supported
   if $HAS_LIBEVTX; then
     json_row="$json_row | No support"
@@ -669,20 +702,25 @@ done
   echo ""
   echo "- **Files tested:** ${#FILES[@]}"
   echo "- **Passed:** $pass"
-  echo "- **Failed (JS):** $fail"
+  $HAS_JS && echo "- **Failed (JS):** $fail"
+  $NATIVE_ONLY && echo "- **Mode:** native-only (C# + Rust)"
   echo ""
   echo "### Internal parsers"
   $HAS_CSHARP && echo "- C# native: yes"
-  $HAS_RUST_WASM && echo "- Rust WASM: yes"
-  $HAS_CS_WASM && echo "- C# WASM (AOT): yes"
-  echo ""
-  echo "### External parsers"
-  $HAS_LIBEVTX && echo "- libevtx (C): yes" || echo "- libevtx (C): skipped"
-  $HAS_VELOCIDEX && echo "- Velocidex (Go): yes" || echo "- Velocidex (Go): skipped"
-  $HAS_0XRAWSEC && echo "- 0xrawsec (Go): yes" || echo "- 0xrawsec (Go): skipped"
-  $HAS_PYTHON_EVTX && echo "- python-evtx CPython: yes" || echo "- python-evtx CPython: skipped"
-  $HAS_PYTHON_EVTX_PYPY && echo "- python-evtx PyPy: yes" || echo "- python-evtx PyPy: skipped"
-  $HAS_PYEVTX_RS && echo "- pyevtx-rs: yes" || echo "- pyevtx-rs: skipped"
+  echo "- Rust native: yes"
+  if ! $NATIVE_ONLY; then
+    $HAS_JS && echo "- JS Node: yes"
+    $HAS_RUST_WASM && echo "- Rust WASM: yes"
+    $HAS_CS_WASM && echo "- C# WASM (AOT): yes"
+    echo ""
+    echo "### External parsers"
+    $HAS_LIBEVTX && echo "- libevtx (C): yes" || echo "- libevtx (C): skipped"
+    $HAS_VELOCIDEX && echo "- Velocidex (Go): yes" || echo "- Velocidex (Go): skipped"
+    $HAS_0XRAWSEC && echo "- 0xrawsec (Go): yes" || echo "- 0xrawsec (Go): skipped"
+    $HAS_PYTHON_EVTX && echo "- python-evtx CPython: yes" || echo "- python-evtx CPython: skipped"
+    $HAS_PYTHON_EVTX_PYPY && echo "- python-evtx PyPy: yes" || echo "- python-evtx PyPy: skipped"
+    $HAS_PYEVTX_RS && echo "- pyevtx-rs: yes" || echo "- pyevtx-rs: skipped"
+  fi
 } >> "$RESULTS"
 
 echo "========================================="

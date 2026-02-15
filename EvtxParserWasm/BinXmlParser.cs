@@ -12,8 +12,21 @@ namespace EvtxParserWasm;
 /// </summary>
 internal sealed class CompiledTemplate(string[] parts, int[] subIds, bool[] isOptional)
 {
+    /// <summary>
+    /// Static XML string fragments interleaved with substitution slots.
+    /// parts[0] precedes the first substitution, parts[N] follows the last.
+    /// </summary>
     public readonly string[] Parts = parts;
+
+    /// <summary>
+    /// Substitution slot indices corresponding to the gaps between <see cref="Parts"/>.
+    /// </summary>
     public readonly int[] SubIds = subIds;
+
+    /// <summary>
+    /// Whether each substitution is optional (0x0E OptionalSubstitution vs 0x0D NormalSubstitution).
+    /// Optional substitutions are skipped when the value is null or zero-length.
+    /// </summary>
     public readonly bool[] IsOptional = isOptional;
 }
 
@@ -22,14 +35,48 @@ internal sealed class CompiledTemplate(string[] parts, int[] subIds, bool[] isOp
 /// </summary>
 internal sealed class BinXmlParser
 {
+    /// <summary>
+    /// Maximum nesting depth for recursive element parsing to prevent stack overflow on crafted input.
+    /// </summary>
+    private const int MaxRecursionDepth = 64;
+
+    /// <summary>
+    /// Pre-computed lookup table mapping byte values 0x00..0xFF to two-character uppercase hex strings.
+    /// </summary>
     private static readonly string[] HexLookup = InitHexLookup();
 
+    /// <summary>
+    /// Raw EVTX file bytes shared across all chunks and records.
+    /// </summary>
     private readonly byte[] _fileData;
+
+    /// <summary>
+    /// Absolute byte offset of this chunk within <see cref="_fileData"/>.
+    /// </summary>
     private readonly int _chunkFileOffset;
+
+    /// <summary>
+    /// Preloaded template definitions keyed by chunk-relative offset.
+    /// Populated by following the chained hash table at chunk offset 384.
+    /// </summary>
     private readonly Dictionary<uint, BinXmlTemplateDefinition> _templates;
+
+    /// <summary>
+    /// Process-wide cache of compiled templates keyed by template GUID.
+    /// Shared across chunks to avoid recompiling identical templates.
+    /// </summary>
     private readonly ConcurrentDictionary<Guid, CompiledTemplate?> _compiledCache;
+
+    /// <summary>
+    /// Per-chunk cache of element/attribute names keyed by chunk-relative offset.
+    /// Pre-populated from the 64-entry common string table at chunk offset 128.
+    /// </summary>
     private readonly Dictionary<uint, string> _nameCache;
 
+    /// <summary>
+    /// Builds a 256-entry lookup table for fast byte-to-hex conversion.
+    /// </summary>
+    /// <returns>Array where index <c>i</c> contains the uppercase two-character hex string for byte <c>i</c>.</returns>
     private static string[] InitHexLookup()
     {
         string[] table = new string[256];
@@ -38,6 +85,14 @@ internal sealed class BinXmlParser
         return table;
     }
 
+    /// <summary>
+    /// Initialises a parser scoped to a single 64 KB EVTX chunk.
+    /// Pre-populates the name cache from the 64-entry common string offset table at chunk offset 128.
+    /// </summary>
+    /// <param name="fileData">Complete EVTX file bytes.</param>
+    /// <param name="chunkFileOffset">Absolute byte offset of the chunk within <paramref name="fileData"/>.</param>
+    /// <param name="templates">Preloaded template definitions for this chunk, keyed by chunk-relative offset.</param>
+    /// <param name="compiledCache">Shared cross-chunk cache of compiled templates keyed by GUID.</param>
     public BinXmlParser(
         byte[] fileData,
         int chunkFileOffset,
@@ -63,6 +118,12 @@ internal sealed class BinXmlParser
         }
     }
 
+    /// <summary>
+    /// Reads a name string directly from the chunk at the given offset.
+    /// Name structure layout: 4 unknown + 2 hash + 2 numChars + numChars*2 UTF-16LE string.
+    /// </summary>
+    /// <param name="chunkRelOffset">Chunk-relative byte offset of the name structure.</param>
+    /// <returns>The decoded UTF-16LE name string, or empty string if out of bounds.</returns>
     private string ReadNameFromChunk(uint chunkRelOffset)
     {
         ReadOnlySpan<byte> chunkData = _fileData.AsSpan(_chunkFileOffset, EvtxChunk.ChunkSize);
@@ -74,6 +135,11 @@ internal sealed class BinXmlParser
         return new string(chars);
     }
 
+    /// <summary>
+    /// Resolves a name from the per-chunk cache, reading from chunk data on cache miss.
+    /// </summary>
+    /// <param name="chunkRelOffset">Chunk-relative byte offset of the name structure.</param>
+    /// <returns>The cached or freshly-read name string.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private string ReadName(uint chunkRelOffset)
     {
@@ -85,9 +151,41 @@ internal sealed class BinXmlParser
     }
 
     /// <summary>
+    /// Skips an inline name structure if one is present at the current position.
+    /// Inline bytes exist only when <paramref name="nameOffset"/> equals the chunk-relative
+    /// position (i.e., the name is defined here for the first time, not a back-reference).
+    /// Layout: 4 unknown + 2 hash + 2 numChars + numChars*2 UTF-16LE string + 2 null terminator
+    /// = 10 + numChars*2 bytes total.
+    /// </summary>
+    /// <param name="data">BinXml byte stream.</param>
+    /// <param name="pos">Current read position; advanced past inline bytes on success.</param>
+    /// <param name="nameOffset">The chunk-relative name offset read from the preceding token.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset of <paramref name="data"/>, used for inline detection.</param>
+    /// <returns>True if parsing can continue; false if bounds check failed (caller should bail).</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool TrySkipInlineName(ReadOnlySpan<byte> data, ref int pos, uint nameOffset, int binxmlChunkBase)
+    {
+        if (nameOffset != (uint)(binxmlChunkBase + pos))
+            return true;
+
+        if (pos + 8 > data.Length)
+            return false;
+
+        ushort numChars = MemoryMarshal.Read<ushort>(data.Slice(pos + 6));
+        int inlineNameBytes = 10 + numChars * 2;
+
+        if (pos + inlineNameBytes > data.Length)
+            return false;
+
+        pos += inlineNameBytes;
+        return true;
+    }
+
+    /// <summary>
     /// Parses a single record's BinXml event data into XML.
     /// </summary>
-    /// <param name="record">The </param>
+    /// <param name="record">The EVTX record whose BinXml event data will be parsed.</param>
+    /// <returns>The rendered XML string for the record's event data.</returns>
     public string ParseRecord(EvtxRecord record)
     {
         ReadOnlySpan<byte> eventData = record.GetEventData(_fileData);
@@ -101,6 +199,14 @@ internal sealed class BinXmlParser
         return result;
     }
 
+    /// <summary>
+    /// Parses a top-level BinXml document, consuming fragment headers, processing instructions,
+    /// and template instances until EOF. Appends rendered XML to <paramref name="vsb"/>.
+    /// </summary>
+    /// <param name="data">BinXml byte stream.</param>
+    /// <param name="pos">Current read position; advanced past all consumed tokens.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset of <paramref name="data"/>.</param>
+    /// <param name="vsb">String builder that receives the rendered XML output.</param>
     private void ParseDocument(ReadOnlySpan<byte> data, ref int pos, int binxmlChunkBase, ref ValueStringBuilder vsb)
     {
         while (pos < data.Length)
@@ -171,8 +277,18 @@ internal sealed class BinXmlParser
             ParseElement(data, ref pos, null, null, null, binxmlChunkBase, ref vsb);
     }
 
+    /// <summary>
+    /// Parses a TemplateInstance token (0x0C). Reads the template definition offset to determine
+    /// inline vs back-reference, then reads substitution descriptors and value data.
+    /// Uses the compiled template cache for fast rendering; falls back to full tree walk on cache miss.
+    /// Layout: 1 token + 1 unknown + 4 unknown + 4 defDataOffset [+ 24-byte inline header + body] + 4 numValues + descriptors + values.
+    /// </summary>
+    /// <param name="data">BinXml byte stream.</param>
+    /// <param name="pos">Current read position; advanced past the entire template instance on return.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset of <paramref name="data"/>.</param>
+    /// <param name="vsb">String builder that receives the rendered XML output.</param>
     private void ParseTemplateInstance(ReadOnlySpan<byte> data, ref int pos, int binxmlChunkBase,
-        ref ValueStringBuilder vsb)
+                                       ref ValueStringBuilder vsb)
     {
         pos++; // consume 0x0C token
         pos++; // unknown1
@@ -265,10 +381,26 @@ internal sealed class BinXmlParser
         }
     }
 
+    /// <summary>
+    /// Parses an OpenStartElement token (0x01/0x41) and its children into XML.
+    /// Token layout: 1 token + 2 depId + 4 dataSize + 4 nameOffset [+ inline name] [+ 4 attrListSize + attrs]
+    /// followed by a close token (CloseEmpty 0x03, CloseStart 0x02, or EndElement 0x04).
+    /// Bit 0x40 on the token indicates attributes are present.
+    /// </summary>
+    /// <param name="data">BinXml byte stream.</param>
+    /// <param name="pos">Current read position; advanced past the entire element on return.</param>
+    /// <param name="valueOffsets">File offsets of substitution values, or null if no template context.</param>
+    /// <param name="valueSizes">Byte sizes of substitution values.</param>
+    /// <param name="valueTypes">BinXml value type codes for each substitution.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset of <paramref name="data"/>.</param>
+    /// <param name="vsb">String builder that receives the rendered XML output.</param>
+    /// <param name="depth">Current recursion depth for stack overflow protection.</param>
     private void ParseElement(ReadOnlySpan<byte> data, ref int pos,
-        int[]? valueOffsets, int[]? valueSizes, byte[]? valueTypes,
-        int binxmlChunkBase, ref ValueStringBuilder vsb)
+                              int[]? valueOffsets, int[]? valueSizes, byte[]? valueTypes,
+                              int binxmlChunkBase, ref ValueStringBuilder vsb, int depth = 0)
     {
+        if (depth >= MaxRecursionDepth) return;
+
         byte tok = data[pos];
         bool hasAttrs = (tok & BinXmlToken.HasMoreDataFlag) != 0;
         pos++; // consume token
@@ -278,12 +410,7 @@ internal sealed class BinXmlParser
         uint nameOffset = MemoryMarshal.Read<uint>(data.Slice(pos));
         pos += 4;
 
-        // Inline name structure present only when defined here
-        if (nameOffset == (uint)(binxmlChunkBase + pos))
-        {
-            ushort elemNameChars = MemoryMarshal.Read<ushort>(data.Slice(pos + 6));
-            pos += 10 + elemNameChars * 2;
-        }
+        if (!TrySkipInlineName(data, ref pos, nameOffset, binxmlChunkBase)) return;
 
         string elemName = ReadName(nameOffset);
         vsb.Append('<');
@@ -306,18 +433,13 @@ internal sealed class BinXmlParser
                 uint attrNameOff = MemoryMarshal.Read<uint>(data.Slice(pos));
                 pos += 4;
 
-                // Inline name structure
-                if (attrNameOff == (uint)(binxmlChunkBase + pos))
-                {
-                    ushort attrNameChars = MemoryMarshal.Read<ushort>(data.Slice(pos + 6));
-                    pos += 10 + attrNameChars * 2;
-                }
+                if (!TrySkipInlineName(data, ref pos, attrNameOff, binxmlChunkBase)) break;
 
                 string attrName = ReadName(attrNameOff);
                 vsb.Append(' ');
                 vsb.Append(attrName);
                 vsb.Append("=\"");
-                ParseContent(data, ref pos, valueOffsets, valueSizes, valueTypes, binxmlChunkBase, ref vsb);
+                ParseContent(data, ref pos, valueOffsets, valueSizes, valueTypes, binxmlChunkBase, ref vsb, depth + 1);
                 vsb.Append('"');
             }
         }
@@ -339,7 +461,7 @@ internal sealed class BinXmlParser
         {
             pos++;
             vsb.Append('>');
-            ParseContent(data, ref pos, valueOffsets, valueSizes, valueTypes, binxmlChunkBase, ref vsb);
+            ParseContent(data, ref pos, valueOffsets, valueSizes, valueTypes, binxmlChunkBase, ref vsb, depth + 1);
             if (pos < data.Length && data[pos] == BinXmlToken.EndElement)
                 pos++;
             vsb.Append("</");
@@ -352,9 +474,23 @@ internal sealed class BinXmlParser
         }
     }
 
+    /// <summary>
+    /// Parses a sequence of BinXml content tokens (child elements, text values, substitutions,
+    /// character/entity references, CDATA sections) until a break token is encountered.
+    /// Break tokens: EOF (0x00), CloseStartElement (0x02), CloseEmptyElement (0x03),
+    /// EndElement (0x04), Attribute (0x06).
+    /// </summary>
+    /// <param name="data">BinXml byte stream.</param>
+    /// <param name="pos">Current read position; advanced past all consumed content tokens.</param>
+    /// <param name="valueOffsets">File offsets of substitution values, or null if no template context.</param>
+    /// <param name="valueSizes">Byte sizes of substitution values.</param>
+    /// <param name="valueTypes">BinXml value type codes for each substitution.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset of <paramref name="data"/>.</param>
+    /// <param name="vsb">String builder that receives the rendered XML output.</param>
+    /// <param name="depth">Current recursion depth for stack overflow protection.</param>
     private void ParseContent(ReadOnlySpan<byte> data, ref int pos,
-        int[]? valueOffsets, int[]? valueSizes, byte[]? valueTypes,
-        int binxmlChunkBase, ref ValueStringBuilder vsb)
+                              int[]? valueOffsets, int[]? valueSizes, byte[]? valueTypes,
+                              int binxmlChunkBase, ref ValueStringBuilder vsb, int depth = 0)
     {
         while (pos < data.Length)
         {
@@ -369,12 +505,10 @@ internal sealed class BinXmlParser
                 baseTok == BinXmlToken.Attribute)
                 break;
 
-            // using a swtich statement here cause we're checking bytes against bytes - thus swtich is quicker than if/else
-            // see https://www.reddit.com/r/csharp/comments/f9wl6y/is_there_a_performance_difference_in_using_a/ (or msdocs) to learn more
             switch (baseTok)
             {
                 case BinXmlToken.OpenStartElement:
-                    ParseElement(data, ref pos, valueOffsets, valueSizes, valueTypes, binxmlChunkBase, ref vsb);
+                    ParseElement(data, ref pos, valueOffsets, valueSizes, valueTypes, binxmlChunkBase, ref vsb, depth + 1);
                     break;
                 case BinXmlToken.Value:
                 {
@@ -461,6 +595,14 @@ internal sealed class BinXmlParser
 
     // ---- Template compilation ----
 
+    /// <summary>
+    /// Compiles a template body into a <see cref="CompiledTemplate"/> of interleaved string parts
+    /// and substitution slot IDs. Returns null if the template contains nested templates or
+    /// other constructs that prevent static compilation.
+    /// </summary>
+    /// <param name="defDataOffset">Chunk-relative offset of the template definition (before the 24-byte header).</param>
+    /// <param name="dataSize">Size in bytes of the template body (after the 24-byte header).</param>
+    /// <returns>A compiled template, or null if the template cannot be statically compiled.</returns>
     private CompiledTemplate? CompileTemplate(int defDataOffset, int dataSize)
     {
         int tplBodyFileOffset = _chunkFileOffset + defDataOffset + 24;
@@ -485,8 +627,21 @@ internal sealed class BinXmlParser
         return new CompiledTemplate(parts.ToArray(), subIds.ToArray(), isOptional.ToArray());
     }
 
+    /// <summary>
+    /// Walks BinXml content tokens, appending static XML text to the last entry in <paramref name="parts"/>
+    /// and recording substitution slots. Sets <paramref name="bail"/> to true if a nested template
+    /// or unsupported token is encountered (compilation cannot proceed).
+    /// </summary>
+    /// <param name="data">BinXml byte stream (template body).</param>
+    /// <param name="pos">Current read position; advanced past consumed tokens.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset of <paramref name="data"/>.</param>
+    /// <param name="parts">Accumulator for static XML string fragments.</param>
+    /// <param name="subIds">Accumulator for substitution slot indices.</param>
+    /// <param name="isOptional">Accumulator for whether each substitution is optional.</param>
+    /// <param name="bail">Set to true if compilation must abort.</param>
+    /// <param name="depth">Current recursion depth for stack overflow protection.</param>
     private void CompileContent(ReadOnlySpan<byte> data, ref int pos, int binxmlChunkBase,
-        List<string> parts, List<int> subIds, List<bool> isOptional, ref bool bail)
+                                List<string> parts, List<int> subIds, List<bool> isOptional, ref bool bail, int depth = 0)
     {
         while (pos < data.Length)
         {
@@ -503,7 +658,7 @@ internal sealed class BinXmlParser
 
             if (baseTok == BinXmlToken.OpenStartElement)
             {
-                CompileElement(data, ref pos, binxmlChunkBase, parts, subIds, isOptional, ref bail);
+                CompileElement(data, ref pos, binxmlChunkBase, parts, subIds, isOptional, ref bail, depth + 1);
             }
             else if (baseTok == BinXmlToken.Value)
             {
@@ -566,9 +721,28 @@ internal sealed class BinXmlParser
         }
     }
 
+    /// <summary>
+    /// Compiles a single OpenStartElement and its children into static XML fragments.
+    /// Appends opening/closing tags and attribute markup to <paramref name="parts"/>,
+    /// recording substitution slots encountered in attributes and child content.
+    /// </summary>
+    /// <param name="data">BinXml byte stream (template body).</param>
+    /// <param name="pos">Current read position; advanced past the entire element.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset of <paramref name="data"/>.</param>
+    /// <param name="parts">Accumulator for static XML string fragments.</param>
+    /// <param name="subIds">Accumulator for substitution slot indices.</param>
+    /// <param name="isOptional">Accumulator for whether each substitution is optional.</param>
+    /// <param name="bail">Set to true if compilation must abort.</param>
+    /// <param name="depth">Current recursion depth for stack overflow protection.</param>
     private void CompileElement(ReadOnlySpan<byte> data, ref int pos, int binxmlChunkBase,
-        List<string> parts, List<int> subIds, List<bool> isOptional, ref bool bail)
+                                List<string> parts, List<int> subIds, List<bool> isOptional, ref bool bail, int depth = 0)
     {
+        if (depth >= MaxRecursionDepth)
+        {
+            bail = true;
+            return;
+        }
+
         byte tok = data[pos];
         bool hasAttrs = (tok & BinXmlToken.HasMoreDataFlag) != 0;
         pos++;
@@ -578,10 +752,10 @@ internal sealed class BinXmlParser
         uint nameOffset = MemoryMarshal.Read<uint>(data.Slice(pos));
         pos += 4;
 
-        if (nameOffset == (uint)(binxmlChunkBase + pos))
+        if (!TrySkipInlineName(data, ref pos, nameOffset, binxmlChunkBase))
         {
-            ushort elemNameChars = MemoryMarshal.Read<ushort>(data.Slice(pos + 6));
-            pos += 10 + elemNameChars * 2;
+            bail = true;
+            return;
         }
 
         string elemName = ReadName(nameOffset);
@@ -603,15 +777,15 @@ internal sealed class BinXmlParser
                 pos++;
                 uint attrNameOff = MemoryMarshal.Read<uint>(data.Slice(pos));
                 pos += 4;
-                if (attrNameOff == (uint)(binxmlChunkBase + pos))
+                if (!TrySkipInlineName(data, ref pos, attrNameOff, binxmlChunkBase))
                 {
-                    ushort attrNameChars = MemoryMarshal.Read<ushort>(data.Slice(pos + 6));
-                    pos += 10 + attrNameChars * 2;
+                    bail = true;
+                    return;
                 }
 
                 string attrName = ReadName(attrNameOff);
                 parts[^1] += $" {attrName}=\"";
-                CompileContent(data, ref pos, binxmlChunkBase, parts, subIds, isOptional, ref bail);
+                CompileContent(data, ref pos, binxmlChunkBase, parts, subIds, isOptional, ref bail, depth + 1);
                 if (bail) return;
                 parts[^1] += "\"";
             }
@@ -633,7 +807,7 @@ internal sealed class BinXmlParser
         {
             pos++;
             parts[^1] += ">";
-            CompileContent(data, ref pos, binxmlChunkBase, parts, subIds, isOptional, ref bail);
+            CompileContent(data, ref pos, binxmlChunkBase, parts, subIds, isOptional, ref bail, depth + 1);
             if (bail) return;
             if (pos < data.Length && data[pos] == BinXmlToken.EndElement)
                 pos++;
@@ -647,9 +821,18 @@ internal sealed class BinXmlParser
 
     // ---- Compiled template rendering ----
 
+    /// <summary>
+    /// Renders a compiled template by interleaving its static XML parts with rendered substitution values.
+    /// </summary>
+    /// <param name="compiled">Pre-compiled template containing static parts and substitution metadata.</param>
+    /// <param name="valueOffsets">File offsets of each substitution value.</param>
+    /// <param name="valueSizes">Byte sizes of each substitution value.</param>
+    /// <param name="valueTypes">BinXml value type codes for each substitution.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset used for embedded BinXml resolution.</param>
+    /// <param name="vsb">String builder that receives the rendered XML output.</param>
     private void RenderCompiled(CompiledTemplate compiled,
-        int[] valueOffsets, int[] valueSizes, byte[] valueTypes,
-        int binxmlChunkBase, ref ValueStringBuilder vsb)
+                                int[] valueOffsets, int[] valueSizes, byte[] valueTypes,
+                                int binxmlChunkBase, ref ValueStringBuilder vsb)
     {
         vsb.Append(compiled.Parts[0]);
         for (int i = 0; i < compiled.SubIds.Length; i++)
@@ -670,13 +853,15 @@ internal sealed class BinXmlParser
     }
 
     /// <summary>
-    /// Renders the value text (BinXmlValueText) 
+    /// Renders a single BinXml substitution value as XML text.
+    /// Dispatches on value type to produce the appropriate string representation
+    /// (numeric, GUID, SID, FILETIME, hex, embedded BinXml, etc.).
     /// </summary>
-    /// <param name="size"></param>
-    /// <param name="valueType"></param>
-    /// <param name="fileOffset"></param>
-    /// <param name="binxmlChunkBase"></param>
-    /// <param name="vsb"></param>
+    /// <param name="size">Byte size of the value data.</param>
+    /// <param name="valueType">BinXml value type code (see <see cref="BinXmlValueType"/>). Bit 0x80 indicates an array.</param>
+    /// <param name="fileOffset">Absolute byte offset of the value data within <see cref="_fileData"/>.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset used for embedded BinXml (type 0x21) resolution.</param>
+    /// <param name="vsb">String builder that receives the rendered text.</param>
     private void RenderValue(int size, byte valueType, int fileOffset, int binxmlChunkBase, ref ValueStringBuilder vsb)
     {
         if (size == 0) return;
@@ -880,8 +1065,18 @@ internal sealed class BinXmlParser
         }
     }
 
+    /// <summary>
+    /// Renders an array-typed value (type code has bit 0x80 set) as comma-separated XML text.
+    /// String arrays (base type 0x01) are null-terminated UTF-16LE concatenated;
+    /// fixed-size types are rendered by splitting on element size.
+    /// </summary>
+    /// <param name="valueBytes">Raw value bytes containing the array data.</param>
+    /// <param name="baseType">Base BinXml value type (with array flag 0x80 masked off).</param>
+    /// <param name="fileOffset">Absolute byte offset of the value data within <see cref="_fileData"/>.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset for nested value rendering.</param>
+    /// <param name="vsb">String builder that receives the comma-separated rendered elements.</param>
     private void RenderArray(ReadOnlySpan<byte> valueBytes, byte baseType, int fileOffset,
-        int binxmlChunkBase, ref ValueStringBuilder vsb)
+                             int binxmlChunkBase, ref ValueStringBuilder vsb)
     {
         // String arrays: null-terminated UTF-16LE strings concatenated
         if (baseType == BinXmlValueType.String)
@@ -926,6 +1121,12 @@ internal sealed class BinXmlParser
         AppendHex(ref vsb, valueBytes);
     }
 
+    /// <summary>
+    /// Returns the fixed byte size of a BinXml value type for array element splitting.
+    /// Returns 0 for variable-length or unknown types.
+    /// </summary>
+    /// <param name="baseType">Base BinXml value type code (without the 0x80 array flag).</param>
+    /// <returns>Fixed element size in bytes, or 0 if the type has no fixed size.</returns>
     private static int GetElementSize(byte baseType)
     {
         return baseType switch
@@ -941,8 +1142,12 @@ internal sealed class BinXmlParser
         };
     }
 
-    // ---- GUID rendering (matches TS format: {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}) ----
-
+    /// <summary>
+    /// Renders a 16-byte GUID in braced lowercase hex format: {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}.
+    /// First three components (Data1/Data2/Data3) are little-endian; last 8 bytes are big-endian.
+    /// </summary>
+    /// <param name="b">16-byte span containing the raw GUID.</param>
+    /// <param name="vsb">String builder that receives the formatted GUID.</param>
     private void RenderGuid(ReadOnlySpan<byte> b, ref ValueStringBuilder vsb)
     {
         uint d1 = MemoryMarshal.Read<uint>(b);
@@ -970,6 +1175,12 @@ internal sealed class BinXmlParser
 
     // ---- Helpers ----
 
+    /// <summary>
+    /// Reads a length-prefixed UTF-16LE string: 2-byte character count followed by numChars * 2 bytes.
+    /// </summary>
+    /// <param name="data">BinXml byte stream.</param>
+    /// <param name="pos">Current read position; advanced past the 2-byte length prefix and string bytes.</param>
+    /// <returns>The decoded string.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static string ReadUnicodeTextStringAsString(ReadOnlySpan<byte> data, ref int pos)
     {
@@ -980,6 +1191,12 @@ internal sealed class BinXmlParser
         return new string(chars);
     }
 
+    /// <summary>
+    /// Appends text to the string builder with XML entity escaping (&amp;, &lt;, &gt;, &quot;, &apos;).
+    /// Uses a fast path for text containing no special characters. Replaces unpaired surrogates with U+FFFD.
+    /// </summary>
+    /// <param name="vsb">String builder that receives the escaped text.</param>
+    /// <param name="text">Source character span to escape and append.</param>
     private static void AppendXmlEscaped(ref ValueStringBuilder vsb, scoped ReadOnlySpan<char> text)
     {
         // Fast path: no XML-special chars and no surrogates → bulk append
@@ -1026,6 +1243,12 @@ internal sealed class BinXmlParser
         }
     }
 
+    /// <summary>
+    /// Returns an XML-escaped copy of <paramref name="str"/>. Used during template compilation
+    /// where a heap string is needed rather than span-based appending.
+    /// </summary>
+    /// <param name="str">The string to escape.</param>
+    /// <returns>The escaped string, or the original string if no escaping was needed.</returns>
     private static string XmlEscapeString(string str)
     {
         if (str.AsSpan().IndexOfAny('&', '<', '>') < 0 && str.AsSpan().IndexOfAny('"', '\'') < 0)
@@ -1034,6 +1257,11 @@ internal sealed class BinXmlParser
             .Replace("\"", "&quot;").Replace("'", "&apos;");
     }
 
+    /// <summary>
+    /// Appends each byte as a two-character uppercase hex string using the precomputed <see cref="HexLookup"/> table.
+    /// </summary>
+    /// <param name="vsb">String builder that receives the hex output.</param>
+    /// <param name="data">Bytes to convert.</param>
     private static void AppendHex(ref ValueStringBuilder vsb, ReadOnlySpan<byte> data)
     {
         for (int i = 0; i < data.Length; i++)
@@ -1042,6 +1270,9 @@ internal sealed class BinXmlParser
 
     // ==== JSON rendering ====
 
+    /// <summary>
+    /// Shared JSON writer options with validation skipped for performance.
+    /// </summary>
     private static readonly JsonWriterOptions JsonOpts = new() { SkipValidation = true };
 
     /// <summary>
@@ -1060,6 +1291,14 @@ internal sealed class BinXmlParser
         return buffer.WrittenSpan.ToArray();
     }
 
+    /// <summary>
+    /// JSON variant of <see cref="ParseDocument"/>. Consumes fragment headers and skips
+    /// processing instructions (no JSON equivalent), then dispatches to fragment parsing.
+    /// </summary>
+    /// <param name="data">BinXml byte stream.</param>
+    /// <param name="pos">Current read position; advanced past consumed tokens.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset of <paramref name="data"/>.</param>
+    /// <param name="w">UTF-8 JSON writer that receives the output.</param>
     private void ParseDocumentJson(ReadOnlySpan<byte> data, ref int pos, int binxmlChunkBase, Utf8JsonWriter w)
     {
         while (pos < data.Length)
@@ -1093,6 +1332,14 @@ internal sealed class BinXmlParser
         }
     }
 
+    /// <summary>
+    /// JSON variant of <see cref="ParseFragment"/>. Skips the 4-byte fragment header, then
+    /// dispatches to template instance or bare element JSON rendering.
+    /// </summary>
+    /// <param name="data">BinXml byte stream.</param>
+    /// <param name="pos">Current read position; advanced past the fragment.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset of <paramref name="data"/>.</param>
+    /// <param name="w">UTF-8 JSON writer that receives the output.</param>
     private void ParseFragmentJson(ReadOnlySpan<byte> data, ref int pos, int binxmlChunkBase, Utf8JsonWriter w)
     {
         if (pos + 4 > data.Length) return;
@@ -1109,6 +1356,15 @@ internal sealed class BinXmlParser
             RenderElementJson(data, ref pos, null, null, null, binxmlChunkBase, w);
     }
 
+    /// <summary>
+    /// JSON variant of <see cref="ParseTemplateInstance"/>. Reads the template definition,
+    /// substitution descriptors and values, then walks the template body producing JSON output.
+    /// Unlike the XML path, this always does a full tree walk (no compiled template shortcut).
+    /// </summary>
+    /// <param name="data">BinXml byte stream.</param>
+    /// <param name="pos">Current read position; advanced past the entire template instance.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset of <paramref name="data"/>.</param>
+    /// <param name="w">UTF-8 JSON writer that receives the output.</param>
     private void ParseTemplateInstanceJson(ReadOnlySpan<byte> data, ref int pos, int binxmlChunkBase, Utf8JsonWriter w)
     {
         pos++; // 0x0C token
@@ -1178,9 +1434,22 @@ internal sealed class BinXmlParser
         ParseContentJson(tplBody, ref tplPos, valueOffsets, valueSizes, valueTypes, tplChunkBase, w);
     }
 
+    /// <summary>
+    /// JSON variant of <see cref="ParseContent"/>. Walks content tokens and writes JSON values
+    /// for text, substitutions, character/entity references, and CDATA. Dispatches child elements
+    /// and nested templates to their respective JSON renderers.
+    /// </summary>
+    /// <param name="data">BinXml byte stream.</param>
+    /// <param name="pos">Current read position; advanced past consumed content tokens.</param>
+    /// <param name="valueOffsets">File offsets of substitution values, or null if no template context.</param>
+    /// <param name="valueSizes">Byte sizes of substitution values.</param>
+    /// <param name="valueTypes">BinXml value type codes for each substitution.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset of <paramref name="data"/>.</param>
+    /// <param name="w">UTF-8 JSON writer that receives the output.</param>
+    /// <param name="depth">Current recursion depth for stack overflow protection.</param>
     private void ParseContentJson(ReadOnlySpan<byte> data, ref int pos,
-        int[]? valueOffsets, int[]? valueSizes, byte[]? valueTypes,
-        int binxmlChunkBase, Utf8JsonWriter w)
+                                  int[]? valueOffsets, int[]? valueSizes, byte[]? valueTypes,
+                                  int binxmlChunkBase, Utf8JsonWriter w, int depth = 0)
     {
         while (pos < data.Length)
         {
@@ -1197,7 +1466,7 @@ internal sealed class BinXmlParser
             switch (baseTok)
             {
                 case BinXmlToken.OpenStartElement:
-                    RenderElementJson(data, ref pos, valueOffsets, valueSizes, valueTypes, binxmlChunkBase, w);
+                    RenderElementJson(data, ref pos, valueOffsets, valueSizes, valueTypes, binxmlChunkBase, w, depth + 1);
                     break;
                 case BinXmlToken.Value:
                 {
@@ -1286,10 +1555,27 @@ internal sealed class BinXmlParser
     /// </summary>
     private readonly struct ElementClassification
     {
+        /// <summary>
+        /// True if the element contains at least one child element or embedded BinXml substitution.
+        /// </summary>
         public readonly bool HasChildElements;
+
+        /// <summary>
+        /// True if the element contains at least one text value, substitution, char/entity ref, or CDATA.
+        /// </summary>
         public readonly bool HasText;
+
+        /// <summary>
+        /// True if the element has no child elements and no text content.
+        /// </summary>
         public readonly bool IsEmpty;
 
+        /// <summary>
+        /// Initialises a new classification result.
+        /// </summary>
+        /// <param name="hasChildElements">Whether child elements are present.</param>
+        /// <param name="hasText">Whether text content is present.</param>
+        /// <param name="isEmpty">Whether the element is empty.</param>
         public ElementClassification(bool hasChildElements, bool hasText, bool isEmpty)
         {
             HasChildElements = hasChildElements;
@@ -1301,8 +1587,16 @@ internal sealed class BinXmlParser
     /// <summary>
     /// Pre-scans element children to classify without consuming position.
     /// </summary>
+    /// <param name="data">BinXml byte stream.</param>
+    /// <param name="pos">Read position to scan from (not modified — value copy).</param>
+    /// <param name="valueOffsets">File offsets of substitution values, or null.</param>
+    /// <param name="valueSizes">Byte sizes of substitution values.</param>
+    /// <param name="valueTypes">BinXml value type codes for each substitution.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset of <paramref name="data"/>.</param>
+    /// <param name="depth">Current recursion depth for stack overflow protection.</param>
+    /// <returns>Classification indicating whether children contain elements, text, both, or neither.</returns>
     private ElementClassification ClassifyChildren(ReadOnlySpan<byte> data, int pos,
-        int[]? valueOffsets, int[]? valueSizes, byte[]? valueTypes, int binxmlChunkBase)
+                                                   int[]? valueOffsets, int[]? valueSizes, byte[]? valueTypes, int binxmlChunkBase, int depth = 0)
     {
         bool hasChildElements = false;
         bool hasText = false;
@@ -1323,7 +1617,7 @@ internal sealed class BinXmlParser
             {
                 hasChildElements = true;
                 // Skip past this element to continue scanning
-                SkipElement(data, ref pos, binxmlChunkBase);
+                SkipElement(data, ref pos, binxmlChunkBase, depth + 1);
             }
             else if (baseTok == BinXmlToken.Value)
             {
@@ -1403,8 +1697,14 @@ internal sealed class BinXmlParser
     /// <summary>
     /// Skips an element without producing output (for classification pre-scanning).
     /// </summary>
-    private void SkipElement(ReadOnlySpan<byte> data, ref int pos, int binxmlChunkBase)
+    /// <param name="data">BinXml byte stream.</param>
+    /// <param name="pos">Current read position; advanced past the entire element.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset of <paramref name="data"/>.</param>
+    /// <param name="depth">Current recursion depth for stack overflow protection.</param>
+    private void SkipElement(ReadOnlySpan<byte> data, ref int pos, int binxmlChunkBase, int depth = 0)
     {
+        if (depth >= MaxRecursionDepth) return;
+
         byte tok = data[pos];
         bool hasAttrs = (tok & BinXmlToken.HasMoreDataFlag) != 0;
         pos++;
@@ -1414,11 +1714,7 @@ internal sealed class BinXmlParser
         uint nameOffset = MemoryMarshal.Read<uint>(data.Slice(pos));
         pos += 4;
 
-        if (nameOffset == (uint)(binxmlChunkBase + pos))
-        {
-            ushort elemNameChars = MemoryMarshal.Read<ushort>(data.Slice(pos + 6));
-            pos += 10 + elemNameChars * 2;
-        }
+        if (!TrySkipInlineName(data, ref pos, nameOffset, binxmlChunkBase)) return;
 
         if (hasAttrs)
         {
@@ -1436,7 +1732,7 @@ internal sealed class BinXmlParser
         {
             pos++;
             // Skip content until EndElement
-            SkipContent(data, ref pos, binxmlChunkBase);
+            SkipContent(data, ref pos, binxmlChunkBase, depth + 1);
             if (pos < data.Length && data[pos] == BinXmlToken.EndElement)
                 pos++;
         }
@@ -1446,7 +1742,15 @@ internal sealed class BinXmlParser
         }
     }
 
-    private void SkipContent(ReadOnlySpan<byte> data, ref int pos, int binxmlChunkBase)
+    /// <summary>
+    /// Skips content tokens without producing output, advancing <paramref name="pos"/> past
+    /// child elements, values, substitutions, char/entity refs, and CDATA sections until a break token.
+    /// </summary>
+    /// <param name="data">BinXml byte stream.</param>
+    /// <param name="pos">Current read position; advanced past all skipped content.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset of <paramref name="data"/>.</param>
+    /// <param name="depth">Current recursion depth for stack overflow protection.</param>
+    private void SkipContent(ReadOnlySpan<byte> data, ref int pos, int binxmlChunkBase, int depth = 0)
     {
         while (pos < data.Length)
         {
@@ -1462,7 +1766,7 @@ internal sealed class BinXmlParser
 
             if (baseTok == BinXmlToken.OpenStartElement)
             {
-                SkipElement(data, ref pos, binxmlChunkBase);
+                SkipElement(data, ref pos, binxmlChunkBase, depth + 1);
             }
             else if (baseTok == BinXmlToken.Value)
             {
@@ -1498,11 +1802,27 @@ internal sealed class BinXmlParser
 
     /// <summary>
     /// Renders a single element as JSON. Core method for JSON output.
+    /// Classifies children to decide between null, scalar value, or nested object representation.
+    /// Attributes are emitted under a "#attributes" property when present.
     /// </summary>
+    /// <param name="data">BinXml byte stream.</param>
+    /// <param name="pos">Current read position; advanced past the entire element.</param>
+    /// <param name="valueOffsets">File offsets of substitution values, or null.</param>
+    /// <param name="valueSizes">Byte sizes of substitution values.</param>
+    /// <param name="valueTypes">BinXml value type codes for each substitution.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset of <paramref name="data"/>.</param>
+    /// <param name="w">UTF-8 JSON writer that receives the output.</param>
+    /// <param name="depth">Current recursion depth for stack overflow protection.</param>
     private void RenderElementJson(ReadOnlySpan<byte> data, ref int pos,
-        int[]? valueOffsets, int[]? valueSizes, byte[]? valueTypes,
-        int binxmlChunkBase, Utf8JsonWriter w)
+                                   int[]? valueOffsets, int[]? valueSizes, byte[]? valueTypes,
+                                   int binxmlChunkBase, Utf8JsonWriter w, int depth = 0)
     {
+        if (depth >= MaxRecursionDepth)
+        {
+            w.WriteNullValue();
+            return;
+        }
+
         byte tok = data[pos];
         bool hasAttrs = (tok & BinXmlToken.HasMoreDataFlag) != 0;
         pos++;
@@ -1512,11 +1832,7 @@ internal sealed class BinXmlParser
         uint nameOffset = MemoryMarshal.Read<uint>(data.Slice(pos));
         pos += 4;
 
-        if (nameOffset == (uint)(binxmlChunkBase + pos))
-        {
-            ushort elemNameChars = MemoryMarshal.Read<ushort>(data.Slice(pos + 6));
-            pos += 10 + elemNameChars * 2;
-        }
+        if (!TrySkipInlineName(data, ref pos, nameOffset, binxmlChunkBase)) return;
 
         string elemName = ReadName(nameOffset);
 
@@ -1538,11 +1854,7 @@ internal sealed class BinXmlParser
                 pos++;
                 uint attrNameOff = MemoryMarshal.Read<uint>(data.Slice(pos));
                 pos += 4;
-                if (attrNameOff == (uint)(binxmlChunkBase + pos))
-                {
-                    ushort attrNameChars = MemoryMarshal.Read<ushort>(data.Slice(pos + 6));
-                    pos += 10 + attrNameChars * 2;
-                }
+                if (!TrySkipInlineName(data, ref pos, attrNameOff, binxmlChunkBase)) break;
 
                 string attrName = ReadName(attrNameOff);
                 string attrValue = RenderContentToString(data, ref pos, valueOffsets, valueSizes, valueTypes,
@@ -1567,12 +1879,15 @@ internal sealed class BinXmlParser
             bool allAttrsEmpty = true;
             if (attrs != null)
             {
-                foreach (var (_, v) in attrs)
+                for (int index = 0; index < attrs.Count; index++)
+                {
+                    var (_, v) = attrs[index];
                     if (v.Length > 0)
                     {
                         allAttrsEmpty = false;
                         break;
                     }
+                }
             }
 
             if (attrs == null || allAttrsEmpty)
@@ -1584,8 +1899,11 @@ internal sealed class BinXmlParser
                 w.WriteStartObject();
                 w.WritePropertyName("#attributes");
                 w.WriteStartObject();
-                foreach (var (n, v) in attrs)
+                for (int index = 0; index < attrs.Count; index++)
+                {
+                    var (n, v) = attrs[index];
                     w.WriteString(n, v);
+                }
                 w.WriteEndObject();
                 w.WriteEndObject();
             }
@@ -1602,17 +1920,20 @@ internal sealed class BinXmlParser
         pos++; // consume CloseStartElement
 
         // Classify children
-        ElementClassification cls = ClassifyChildren(data, pos, valueOffsets, valueSizes, valueTypes, binxmlChunkBase);
+        ElementClassification cls = ClassifyChildren(data, pos, valueOffsets, valueSizes, valueTypes, binxmlChunkBase, depth + 1);
 
         bool hasNonEmptyAttrs = false;
         if (attrs != null)
         {
-            foreach (var (_, v) in attrs)
+            for (int index = 0; index < attrs.Count; index++)
+            {
+                var (_, v) = attrs[index];
                 if (v.Length > 0)
                 {
                     hasNonEmptyAttrs = true;
                     break;
                 }
+            }
         }
 
         // Check for EventData/UserData flattening
@@ -1640,8 +1961,11 @@ internal sealed class BinXmlParser
             {
                 w.WritePropertyName("#attributes");
                 w.WriteStartObject();
-                foreach (var (n, v) in attrs!)
+                for (int index = 0; index < attrs!.Count; index++)
+                {
+                    var (n, v) = attrs![index];
                     w.WriteString(n, v);
+                }
                 w.WriteEndObject();
             }
 
@@ -1657,7 +1981,7 @@ internal sealed class BinXmlParser
             {
                 // Render child elements as properties
                 RenderChildElementsJson(data, ref pos, valueOffsets, valueSizes, valueTypes, binxmlChunkBase, w,
-                    isDataContainer);
+                    isDataContainer, depth + 1);
             }
 
             if (pos < data.Length && data[pos] == BinXmlToken.EndElement)
@@ -1669,10 +1993,19 @@ internal sealed class BinXmlParser
 
     /// <summary>
     /// Renders text-only content as a JSON value (string or typed primitive).
+    /// When a single typed substitution is the only content, renders it as a native JSON type
+    /// (number, boolean, etc.) rather than a string for schema fidelity.
     /// </summary>
+    /// <param name="data">BinXml byte stream.</param>
+    /// <param name="pos">Current read position; advanced past consumed content tokens.</param>
+    /// <param name="valueOffsets">File offsets of substitution values, or null.</param>
+    /// <param name="valueSizes">Byte sizes of substitution values.</param>
+    /// <param name="valueTypes">BinXml value type codes for each substitution.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset of <paramref name="data"/>.</param>
+    /// <param name="w">UTF-8 JSON writer that receives the output.</param>
     private void RenderTextContentJson(ReadOnlySpan<byte> data, ref int pos,
-        int[]? valueOffsets, int[]? valueSizes, byte[]? valueTypes,
-        int binxmlChunkBase, Utf8JsonWriter w)
+                                       int[]? valueOffsets, int[]? valueSizes, byte[]? valueTypes,
+                                       int binxmlChunkBase, Utf8JsonWriter w)
     {
         // Check if there's a single substitution — render as typed value
         int savedPos = pos;
@@ -1735,10 +2068,22 @@ internal sealed class BinXmlParser
 
     /// <summary>
     /// Renders child elements as JSON properties. Handles duplicate name suffixing and EventData/UserData flattening.
+    /// For EventData/UserData containers, Data elements with a Name= attribute are flattened to
+    /// direct key-value pairs (e.g., &lt;Data Name="Foo"&gt;bar&lt;/Data&gt; becomes "Foo": "bar").
+    /// Duplicate element names receive _N suffixes (e.g., "Data_1", "Data_2").
     /// </summary>
+    /// <param name="data">BinXml byte stream.</param>
+    /// <param name="pos">Current read position; advanced past consumed child content.</param>
+    /// <param name="valueOffsets">File offsets of substitution values, or null.</param>
+    /// <param name="valueSizes">Byte sizes of substitution values.</param>
+    /// <param name="valueTypes">BinXml value type codes for each substitution.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset of <paramref name="data"/>.</param>
+    /// <param name="w">UTF-8 JSON writer that receives the output.</param>
+    /// <param name="isDataContainer">True if the parent element is EventData or UserData, enabling Name= flattening.</param>
+    /// <param name="depth">Current recursion depth for stack overflow protection.</param>
     private void RenderChildElementsJson(ReadOnlySpan<byte> data, ref int pos,
-        int[]? valueOffsets, int[]? valueSizes, byte[]? valueTypes,
-        int binxmlChunkBase, Utf8JsonWriter w, bool isDataContainer)
+                                         int[]? valueOffsets, int[]? valueSizes, byte[]? valueTypes,
+                                         int binxmlChunkBase, Utf8JsonWriter w, bool isDataContainer, int depth = 0)
     {
         Dictionary<string, int>? nameCounts = null;
 
@@ -1789,7 +2134,7 @@ internal sealed class BinXmlParser
                     w.WritePropertyName(childName);
                 }
 
-                RenderElementJson(data, ref pos, valueOffsets, valueSizes, valueTypes, binxmlChunkBase, w);
+                RenderElementJson(data, ref pos, valueOffsets, valueSizes, valueTypes, binxmlChunkBase, w, depth + 1);
             }
             else if (baseTok == BinXmlToken.Value)
             {
@@ -1843,9 +2188,17 @@ internal sealed class BinXmlParser
 
     /// <summary>
     /// Peeks at a Data element to check for Name="..." attribute, returns the value or null.
+    /// Does not advance the caller's position (uses a local copy of <paramref name="pos"/>).
     /// </summary>
+    /// <param name="data">BinXml byte stream.</param>
+    /// <param name="pos">Element start position (not modified — value copy).</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset of <paramref name="data"/>.</param>
+    /// <param name="valueOffsets">File offsets of substitution values, or null.</param>
+    /// <param name="valueSizes">Byte sizes of substitution values.</param>
+    /// <param name="valueTypes">BinXml value type codes for each substitution.</param>
+    /// <returns>The Name attribute value if present and non-empty; otherwise null.</returns>
     private string? PeekDataNameAttribute(ReadOnlySpan<byte> data, int pos,
-        int binxmlChunkBase, int[]? valueOffsets, int[]? valueSizes, byte[]? valueTypes)
+                                          int binxmlChunkBase, int[]? valueOffsets, int[]? valueSizes, byte[]? valueTypes)
     {
         byte tok = data[pos];
         bool hasAttrs = (tok & BinXmlToken.HasMoreDataFlag) != 0;
@@ -1857,11 +2210,7 @@ internal sealed class BinXmlParser
         uint nameOffset = MemoryMarshal.Read<uint>(data.Slice(pos));
         pos += 4;
 
-        if (nameOffset == (uint)(binxmlChunkBase + pos))
-        {
-            ushort elemNameChars = MemoryMarshal.Read<ushort>(data.Slice(pos + 6));
-            pos += 10 + elemNameChars * 2;
-        }
+        if (!TrySkipInlineName(data, ref pos, nameOffset, binxmlChunkBase)) return null;
 
         // Now at attribute list
         if (pos + 4 > data.Length) return null;
@@ -1878,11 +2227,7 @@ internal sealed class BinXmlParser
             pos++;
             uint attrNameOff = MemoryMarshal.Read<uint>(data.Slice(pos));
             pos += 4;
-            if (attrNameOff == (uint)(binxmlChunkBase + pos))
-            {
-                ushort attrNameChars = MemoryMarshal.Read<ushort>(data.Slice(pos + 6));
-                pos += 10 + attrNameChars * 2;
-            }
+            if (!TrySkipInlineName(data, ref pos, attrNameOff, binxmlChunkBase)) break;
 
             string attrName = ReadName(attrNameOff);
             if (attrName == "Name")
@@ -1905,9 +2250,16 @@ internal sealed class BinXmlParser
     /// Renders a Data element's text value as JSON, skipping the element structure.
     /// Used for EventData/UserData Name= flattening.
     /// </summary>
+    /// <param name="data">BinXml byte stream.</param>
+    /// <param name="pos">Current read position at the Data element's OpenStartElement token; advanced past the entire element.</param>
+    /// <param name="valueOffsets">File offsets of substitution values, or null.</param>
+    /// <param name="valueSizes">Byte sizes of substitution values.</param>
+    /// <param name="valueTypes">BinXml value type codes for each substitution.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset of <paramref name="data"/>.</param>
+    /// <param name="w">UTF-8 JSON writer that receives the output.</param>
     private void RenderDataElementValueJson(ReadOnlySpan<byte> data, ref int pos,
-        int[]? valueOffsets, int[]? valueSizes, byte[]? valueTypes,
-        int binxmlChunkBase, Utf8JsonWriter w)
+                                            int[]? valueOffsets, int[]? valueSizes, byte[]? valueTypes,
+                                            int binxmlChunkBase, Utf8JsonWriter w)
     {
         byte tok = data[pos];
         bool hasAttrs = (tok & BinXmlToken.HasMoreDataFlag) != 0;
@@ -1917,10 +2269,10 @@ internal sealed class BinXmlParser
         uint nameOffset = MemoryMarshal.Read<uint>(data.Slice(pos));
         pos += 4;
 
-        if (nameOffset == (uint)(binxmlChunkBase + pos))
+        if (!TrySkipInlineName(data, ref pos, nameOffset, binxmlChunkBase))
         {
-            ushort elemNameChars = MemoryMarshal.Read<ushort>(data.Slice(pos + 6));
-            pos += 10 + elemNameChars * 2;
+            w.WriteNullValue();
+            return;
         }
 
         if (hasAttrs)
@@ -1937,11 +2289,7 @@ internal sealed class BinXmlParser
                 pos++;
                 uint attrNameOff = MemoryMarshal.Read<uint>(data.Slice(pos));
                 pos += 4;
-                if (attrNameOff == (uint)(binxmlChunkBase + pos))
-                {
-                    ushort attrNameChars = MemoryMarshal.Read<ushort>(data.Slice(pos + 6));
-                    pos += 10 + attrNameChars * 2;
-                }
+                if (!TrySkipInlineName(data, ref pos, attrNameOff, binxmlChunkBase)) break;
 
                 SkipContent(data, ref pos, binxmlChunkBase);
             }
@@ -1977,8 +2325,15 @@ internal sealed class BinXmlParser
     /// <summary>
     /// Renders content tokens as a plain string (for attribute values and text content in JSON mode).
     /// </summary>
+    /// <param name="data">BinXml byte stream.</param>
+    /// <param name="pos">Current read position; advanced past consumed content tokens.</param>
+    /// <param name="valueOffsets">File offsets of substitution values, or null.</param>
+    /// <param name="valueSizes">Byte sizes of substitution values.</param>
+    /// <param name="valueTypes">BinXml value type codes for each substitution.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset of <paramref name="data"/>.</param>
+    /// <returns>The concatenated plain-text string of all content tokens.</returns>
     private string RenderContentToString(ReadOnlySpan<byte> data, ref int pos,
-        int[]? valueOffsets, int[]? valueSizes, byte[]? valueTypes, int binxmlChunkBase)
+                                         int[]? valueOffsets, int[]? valueSizes, byte[]? valueTypes, int binxmlChunkBase)
     {
         ValueStringBuilder vsb = new(stackalloc char[128]);
 
@@ -2069,6 +2424,12 @@ internal sealed class BinXmlParser
         return result;
     }
 
+    /// <summary>
+    /// Skips all content tokens and consumes the trailing EndElement (0x04) token if present.
+    /// Used to discard the body of an empty or unneeded element.
+    /// </summary>
+    /// <param name="data">BinXml byte stream.</param>
+    /// <param name="pos">Current read position; advanced past content and the EndElement token.</param>
     private void SkipToEndElement(ReadOnlySpan<byte> data, ref int pos)
     {
         SkipContent(data, ref pos, 0);
@@ -2078,7 +2439,14 @@ internal sealed class BinXmlParser
 
     /// <summary>
     /// Renders a typed value as a JSON value.
+    /// Numeric types are written as JSON numbers; strings, GUIDs, SIDs, timestamps, and hex values
+    /// are written as JSON strings; booleans as JSON booleans; embedded BinXml is recursively parsed.
     /// </summary>
+    /// <param name="size">Byte size of the value data.</param>
+    /// <param name="valueType">BinXml value type code. Bit 0x80 indicates an array.</param>
+    /// <param name="fileOffset">Absolute byte offset of the value data within <see cref="_fileData"/>.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset for embedded BinXml (type 0x21) resolution.</param>
+    /// <param name="w">UTF-8 JSON writer that receives the output.</param>
     private void RenderValueJson(int size, byte valueType, int fileOffset, int binxmlChunkBase, Utf8JsonWriter w)
     {
         if (size == 0)
@@ -2332,8 +2700,17 @@ internal sealed class BinXmlParser
         }
     }
 
+    /// <summary>
+    /// Renders an array-typed value as a JSON array. String arrays are split on null terminators;
+    /// fixed-size types are split by element size. Falls back to a single hex string for unknown types.
+    /// </summary>
+    /// <param name="valueBytes">Raw value bytes containing the array data.</param>
+    /// <param name="baseType">Base BinXml value type (with array flag 0x80 masked off).</param>
+    /// <param name="fileOffset">Absolute byte offset of the value data within <see cref="_fileData"/>.</param>
+    /// <param name="binxmlChunkBase">Chunk-relative base offset for nested value rendering.</param>
+    /// <param name="w">UTF-8 JSON writer that receives the output.</param>
     private void RenderArrayJson(ReadOnlySpan<byte> valueBytes, byte baseType, int fileOffset,
-        int binxmlChunkBase, Utf8JsonWriter w)
+                                 int binxmlChunkBase, Utf8JsonWriter w)
     {
         w.WriteStartArray();
 
