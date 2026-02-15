@@ -1182,7 +1182,7 @@ internal sealed class BinXmlParser
     /// <param name="pos">Current read position; advanced past the 2-byte length prefix and string bytes.</param>
     /// <returns>The decoded string.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static string ReadUnicodeTextStringAsString(ReadOnlySpan<byte> data, ref int pos)
+    internal static string ReadUnicodeTextStringAsString(ReadOnlySpan<byte> data, ref int pos)
     {
         ushort numChars = MemoryMarshal.Read<ushort>(data.Slice(pos));
         pos += 2;
@@ -1249,7 +1249,7 @@ internal sealed class BinXmlParser
     /// </summary>
     /// <param name="str">The string to escape.</param>
     /// <returns>The escaped string, or the original string if no escaping was needed.</returns>
-    private static string XmlEscapeString(string str)
+    internal static string XmlEscapeString(string str)
     {
         if (str.AsSpan().IndexOfAny('&', '<', '>') < 0 && str.AsSpan().IndexOfAny('"', '\'') < 0)
             return str;

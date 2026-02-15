@@ -66,9 +66,10 @@ public class EvtxParser
     /// <param name="maxThreads">Thread count: 0/-1 = all cores, 1 = single-threaded, N = use N threads.</param>
     /// <param name="format">Output format (XML or JSON).</param>
     /// <param name="validateChecksums">When true, skip chunks that fail CRC32 header or data checksum validation.</param>
+    /// <param name="wevtCache">Optional offline template cache built from provider PE binaries. Pre-populates the compiled template cache before chunk parsing.</param>
     /// <returns>A fully parsed <see cref="EvtxParser"/> containing the file header, chunks, and aggregate record count.</returns>
     public static EvtxParser Parse(byte[] fileData, int maxThreads = 0, OutputFormat format = OutputFormat.Xml,
-                                   bool validateChecksums = false)
+                                   bool validateChecksums = false, WevtCache? wevtCache = null)
     {
         EvtxFileHeader fileHeader = EvtxFileHeader.ParseEvtxFileHeader(fileData);
         int chunkStart = fileHeader.HeaderBlockSize;
@@ -102,6 +103,7 @@ public class EvtxParser
 
         // Phase 2 (parallel): parse all valid chunks
         ConcurrentDictionary<Guid, CompiledTemplate?> compiledCache = new();
+        wevtCache?.PopulateCache(compiledCache);
         EvtxChunk[] results = new EvtxChunk[validCount];
 
         int parallelism = maxThreads > 0 ? maxThreads : -1;

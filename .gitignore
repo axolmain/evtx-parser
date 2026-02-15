@@ -490,3 +490,4 @@ evtx-parser-react/public/_framework/
 
 # esbuild benchmark bundle
 test/bench-cli.mjs
+**/personal-notes/

@@ -3,7 +3,8 @@ import path from 'node:path'
 import {fileURLToPath} from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const wasmPkg = path.resolve(__dirname, '../evtx-master/evtx-wasm/pkg')
+const externalDir = process.env.EXTERNAL_DIR || path.resolve(__dirname, '../../evtx-external')
+const wasmPkg = path.resolve(externalDir, 'evtx-rust/evtx-wasm/pkg')
 
 const file = process.argv[2]
 if (!file) {
