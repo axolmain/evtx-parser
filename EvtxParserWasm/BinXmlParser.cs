@@ -119,7 +119,7 @@ internal sealed class BinXmlParser
             {
                 ParseFragment(data, ref pos, binxmlChunkBase, ref vsb);
             }
-            else if (baseTok == BinXmlToken.PITarget)
+            else if (baseTok == BinXmlToken.PiTarget)
             {
                 pos++; // consume 0x0A
                 uint piNameOff = MemoryMarshal.Read<uint>(data.Slice(pos));
@@ -128,7 +128,7 @@ internal sealed class BinXmlParser
                 vsb.Append("<?");
                 vsb.Append(piName);
 
-                if (pos < data.Length && data[pos] == BinXmlToken.PIData)
+                if (pos < data.Length && data[pos] == BinXmlToken.PiData)
                 {
                     pos++; // consume 0x0B
                     string piText = ReadUnicodeTextStringAsString(data, ref pos);
@@ -362,82 +362,92 @@ internal sealed class BinXmlParser
                 baseTok == BinXmlToken.Attribute)
                 break;
 
-            if (baseTok == BinXmlToken.OpenStartElement)
+            // using a swtich statement here cause we're checking bytes against bytes - thus swtich is quicker than if/else
+            // see https://www.reddit.com/r/csharp/comments/f9wl6y/is_there_a_performance_difference_in_using_a/ (or msdocs) to learn more
+            switch (baseTok)
             {
-                ParseElement(data, ref pos, valueOffsets, valueSizes, valueTypes, binxmlChunkBase, ref vsb);
-            }
-            else if (baseTok == BinXmlToken.Value)
-            {
-                pos++; // consume token
-                pos++; // value type
-                string str = ReadUnicodeTextStringAsString(data, ref pos);
-                AppendXmlEscaped(ref vsb, str.AsSpan());
-            }
-            else if (baseTok == BinXmlToken.NormalSubstitution)
-            {
-                pos++; // consume token
-                ushort subId = MemoryMarshal.Read<ushort>(data.Slice(pos));
-                pos += 2;
-                pos++; // subValType
-                if (valueOffsets != null && subId < valueOffsets.Length)
+                case BinXmlToken.OpenStartElement:
+                    ParseElement(data, ref pos, valueOffsets, valueSizes, valueTypes, binxmlChunkBase, ref vsb);
+                    break;
+                case BinXmlToken.Value:
                 {
-                    RenderValue(valueSizes![subId], valueTypes![subId], valueOffsets[subId], binxmlChunkBase, ref vsb);
+                    pos++; // consume token
+                    pos++; // value type
+                    string str = ReadUnicodeTextStringAsString(data, ref pos);
+                    AppendXmlEscaped(ref vsb, str.AsSpan());
+                    break;
                 }
-            }
-            else if (baseTok == BinXmlToken.OptionalSubstitution)
-            {
-                pos++; // consume token
-                ushort subId = MemoryMarshal.Read<ushort>(data.Slice(pos));
-                pos += 2;
-                pos++; // subValType
-                if (valueOffsets != null && subId < valueOffsets.Length)
+                case BinXmlToken.NormalSubstitution:
                 {
-                    byte valType = valueTypes![subId];
-                    int valSize = valueSizes![subId];
-                    if (valType != BinXmlValueType.Null && valSize > 0)
+                    pos++; // consume token
+                    ushort subId = MemoryMarshal.Read<ushort>(data.Slice(pos));
+                    pos += 2;
+                    pos++; // subValType
+                    if (valueOffsets != null && subId < valueOffsets.Length)
                     {
-                        RenderValue(valSize, valType, valueOffsets[subId], binxmlChunkBase, ref vsb);
+                        RenderValue(valueSizes![subId], valueTypes![subId], valueOffsets[subId], binxmlChunkBase,
+                            ref vsb);
                     }
+
+                    break;
                 }
-            }
-            else if (baseTok == BinXmlToken.CharRef)
-            {
-                pos++; // consume token
-                ushort charVal = MemoryMarshal.Read<ushort>(data.Slice(pos));
-                pos += 2;
-                vsb.Append("&#");
-                vsb.AppendFormatted(charVal);
-                vsb.Append(';');
-            }
-            else if (baseTok == BinXmlToken.EntityRef)
-            {
-                pos++; // consume token
-                uint nameOff = MemoryMarshal.Read<uint>(data.Slice(pos));
-                pos += 4;
-                string entityName = ReadName(nameOff);
-                vsb.Append('&');
-                vsb.Append(entityName);
-                vsb.Append(';');
-            }
-            else if (baseTok == BinXmlToken.CDataSection)
-            {
-                pos++; // consume token
-                string cdataStr = ReadUnicodeTextStringAsString(data, ref pos);
-                vsb.Append("<![CDATA[");
-                vsb.Append(cdataStr);
-                vsb.Append("]]>");
-            }
-            else if (baseTok == BinXmlToken.TemplateInstance)
-            {
-                ParseTemplateInstance(data, ref pos, binxmlChunkBase, ref vsb);
-            }
-            else if (baseTok == BinXmlToken.FragmentHeader)
-            {
-                ParseFragment(data, ref pos, binxmlChunkBase, ref vsb);
-            }
-            else
-            {
-                pos++;
+                case BinXmlToken.OptionalSubstitution:
+                {
+                    pos++; // consume token
+                    ushort subId = MemoryMarshal.Read<ushort>(data.Slice(pos));
+                    pos += 2;
+                    pos++; // subValType
+                    if (valueOffsets != null && subId < valueOffsets.Length)
+                    {
+                        byte valType = valueTypes![subId];
+                        int valSize = valueSizes![subId];
+                        if (valType != BinXmlValueType.Null && valSize > 0)
+                        {
+                            RenderValue(valSize, valType, valueOffsets[subId], binxmlChunkBase, ref vsb);
+                        }
+                    }
+
+                    break;
+                }
+                case BinXmlToken.CharRef:
+                {
+                    pos++; // consume token
+                    ushort charVal = MemoryMarshal.Read<ushort>(data.Slice(pos));
+                    pos += 2;
+                    vsb.Append("&#");
+                    vsb.AppendFormatted(charVal);
+                    vsb.Append(';');
+                    break;
+                }
+                case BinXmlToken.EntityRef:
+                {
+                    pos++; // consume token
+                    uint nameOff = MemoryMarshal.Read<uint>(data.Slice(pos));
+                    pos += 4;
+                    string entityName = ReadName(nameOff);
+                    vsb.Append('&');
+                    vsb.Append(entityName);
+                    vsb.Append(';');
+                    break;
+                }
+                case BinXmlToken.CDataSection:
+                {
+                    pos++; // consume token
+                    string cdataStr = ReadUnicodeTextStringAsString(data, ref pos);
+                    vsb.Append("<![CDATA[");
+                    vsb.Append(cdataStr);
+                    vsb.Append("]]>");
+                    break;
+                }
+                case BinXmlToken.TemplateInstance:
+                    ParseTemplateInstance(data, ref pos, binxmlChunkBase, ref vsb);
+                    break;
+                case BinXmlToken.FragmentHeader:
+                    ParseFragment(data, ref pos, binxmlChunkBase, ref vsb);
+                    break;
+                default:
+                    pos++;
+                    break;
             }
         }
     }
@@ -660,7 +670,6 @@ internal sealed class BinXmlParser
     /// <param name="fileOffset"></param>
     /// <param name="binxmlChunkBase"></param>
     /// <param name="vsb"></param>
-
     private void RenderValue(int size, byte valueType, int fileOffset, int binxmlChunkBase, ref ValueStringBuilder vsb)
     {
         if (size == 0) return;
@@ -856,6 +865,8 @@ internal sealed class BinXmlParser
                 break;
             }
 
+            case BinXmlValueType.EvtHandle:
+            case BinXmlValueType.EvtXml:
             default:
                 AppendHex(ref vsb, valueBytes);
                 break;
@@ -914,7 +925,8 @@ internal sealed class BinXmlParser
         {
             BinXmlValueType.Int8 or BinXmlValueType.UInt8 => 1,
             BinXmlValueType.Int16 or BinXmlValueType.UInt16 => 2,
-            BinXmlValueType.Int32 or BinXmlValueType.UInt32 or BinXmlValueType.Float or BinXmlValueType.HexInt32 => 4,
+            BinXmlValueType.Int32 or BinXmlValueType.UInt32 or BinXmlValueType.Float or BinXmlValueType.Bool
+                or BinXmlValueType.HexInt32 => 4,
             BinXmlValueType.Int64 or BinXmlValueType.UInt64 or BinXmlValueType.Double or BinXmlValueType.FileTime
                 or BinXmlValueType.HexInt64 => 8,
             BinXmlValueType.Guid or BinXmlValueType.SystemTime => 16,
