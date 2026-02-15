@@ -652,7 +652,14 @@ internal sealed class BinXmlParser
         }
     }
 
-    // ---- Value rendering ----
+    /// <summary>
+    /// Renders the value text (BinXmlValueText) 
+    /// </summary>
+    /// <param name="size"></param>
+    /// <param name="valueType"></param>
+    /// <param name="fileOffset"></param>
+    /// <param name="binxmlChunkBase"></param>
+    /// <param name="vsb"></param>
 
     private void RenderValue(int size, byte valueType, int fileOffset, int binxmlChunkBase, ref ValueStringBuilder vsb)
     {

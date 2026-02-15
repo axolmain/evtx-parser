@@ -484,3 +484,6 @@ $RECYCLE.BIN/
 *.swp
 /evtx-master/**
 *trace.json
+
+# wasm
+evtx-parser-react/public/_framework/ 

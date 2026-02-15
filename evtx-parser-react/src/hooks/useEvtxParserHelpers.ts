@@ -3,6 +3,7 @@ import type {
 	ParsedEventRecord,
 	TemplateStatsSummary
 } from '@/parser'
+import type {ParseEngine} from '@/worker/parse-worker'
 
 type WorkerMessage =
 	| {type: 'records'; records: ParsedEventRecord[]; progress: number}
@@ -37,7 +38,8 @@ function getWorker(): Worker {
 
 export function parseFileBuffer(
 	buffer: ArrayBuffer,
-	callbacks?: StreamCallbacks
+	callbacks?: StreamCallbacks,
+	engine: ParseEngine = 'js'
 ): Promise<ParseTimedResult> {
 	return new Promise((resolve, reject) => {
 		const w = getWorker()
@@ -69,7 +71,11 @@ export function parseFileBuffer(
 			}
 		}
 		w.onerror = e => reject(new Error(e.message))
-		w.postMessage(buffer, [buffer])
+		if (engine === 'wasm') {
+			w.postMessage({type: 'parse', buffer, engine})
+		} else {
+			w.postMessage(buffer, [buffer])
+		}
 	})
 }
 

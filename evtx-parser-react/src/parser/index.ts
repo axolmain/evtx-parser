@@ -8,6 +8,7 @@ export {
 	preloadTemplateDefinitions
 } from './evtx-chunk'
 export {discoverChunkOffsets, parseEvtx} from './evtx-parser'
+export {parseEvtxWasm} from './dotnet-wasm'
 export {formatChunkHeaderComment, formatRecordComment} from './format'
 export {formatGuid, hex32} from './helpers'
 export type {
