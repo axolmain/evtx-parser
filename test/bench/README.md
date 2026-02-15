@@ -2,6 +2,31 @@
 
 Helper modules sourced by `../bench-all.sh`. Don't run these directly.
 
+## Prerequisites
+
+All parsers are built automatically on first run. You just need the toolchains installed.
+
+**Required** (script exits without these):
+- **hyperfine** — benchmark runner
+- **Rust/cargo** — builds the Rust native parser
+- **Node.js** — JS parser + WASM CLI wrappers
+- **git** — clones external parser repos
+
+**For full benchmarks** (gracefully skipped if missing):
+- **.NET 10 SDK** — C# native parser
+- **Go** — Velocidex + 0xrawsec parsers
+- **wasm-pack** — Rust WASM build
+- **Python 3 + uv** — python-evtx + pyevtx-rs
+- **autoconf, automake, libtool, make** — building libevtx (C) from source
+
+```bash
+brew install hyperfine autoconf automake libtool
+brew install node rustup go dotnet uv python@3
+cargo install wasm-pack
+```
+
+Use `--native-only` to skip everything except C# and Rust native benchmarks.
+
 | File | Purpose |
 |------|---------|
 | `lib.sh` | Colors, logging, timing helpers (`get_formatted`, `measure_cmd_once_seconds`, etc.) |
